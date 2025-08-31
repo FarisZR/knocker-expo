@@ -1,23 +1,43 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Animated, Easing } from 'react-native';
 import { getItem } from '../services/storage';
 import { knock } from '../services/knocker';
 import { StyledView } from '../../components/ui/StyledView';
 import { StyledText } from '../../components/ui/StyledText';
 import { StyledButton } from '../../components/ui/StyledButton';
+import StyledCard from '../../components/ui/StyledCard';
+import { useThemeColor } from '../../hooks/useThemeColor';
+import { Colors } from '../../constants/Colors';
 
 const MainScreen = () => {
   const [status, setStatus] = useState('');
   const [endpoint, setEndpoint] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [lastKnock, setLastKnock] = useState<Date | null>(null);
+
+  const statusOpacity = useRef(new Animated.Value(0)).current;
+
+  const animateStatus = () => {
+    statusOpacity.setValue(0);
+    Animated.timing(statusOpacity, {
+      toValue: 1,
+      duration: 360,
+      easing: Easing.out(Easing.ease),
+      useNativeDriver: true,
+    }).start();
+  };
 
   const handleKnock = async (knockEndpoint: string, knockToken: string) => {
     try {
       setStatus('Knocking...');
+      animateStatus();
       const result = await knock(knockEndpoint, knockToken);
       setStatus(`Whitelisted: ${result.whitelisted_entry}\nExpires in: ${result.expires_in_seconds} seconds`);
+      setLastKnock(new Date());
+      animateStatus();
     } catch (error: any) {
       setStatus(`Error: ${error.message}`);
+      animateStatus();
     }
   };
 
@@ -32,6 +52,7 @@ const MainScreen = () => {
         await handleKnock(storedEndpoint, storedToken);
       } else {
         setStatus('Credentials not set. Go to Setup.');
+        animateStatus();
       }
     };
     loadAndKnock();
@@ -41,37 +62,71 @@ const MainScreen = () => {
     if (endpoint && token) {
       handleKnock(endpoint, token);
     }
-  }
+  };
+
+  const isError = status.startsWith('Error') || status.startsWith('Credentials not set');
 
   return (
-    <StyledView style={styles.container}>
-      <StyledText style={styles.title}>Knocker</StyledText>
-      <StyledButton title="Knock" onPress={onManualKnock} />
-      <StyledText style={styles.status}>{status}</StyledText>
+    <StyledView style={styles.outer}>
+      <Animated.Text style={[styles.gradientTitle]} accessibilityRole="header">
+        Knocker
+      </Animated.Text>
+      <StyledCard animated>
+        <StyledText style={styles.sectionTitle}>Whitelist</StyledText>
+        <StyledButton
+          title={endpoint && token ? 'Knock Again' : 'Knock'}
+          onPress={onManualKnock}
+          pulse={!!(endpoint && token)}
+        />
+        <Animated.View style={{ opacity: statusOpacity }}>
+          <StyledText style={[styles.statusText, isError && styles.error]}>
+            {status}
+          </StyledText>
+          {!isError && lastKnock && (
+            <StyledText style={styles.meta}>
+              Last knock: {lastKnock.toLocaleTimeString()}
+            </StyledText>
+          )}
+        </Animated.View>
+      </StyledCard>
     </StyledView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  outer: {
     flex: 1,
-    justifyContent: 'center',
-    padding: 16,
-    maxWidth: 800,
+    padding: 24,
+    maxWidth: 860,
     width: '100%',
     alignSelf: 'center',
+    justifyContent: 'center',
+    gap: 32,
   },
-  title: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    marginBottom: 48,
+  gradientTitle: {
+    fontSize: 54,
+    fontWeight: '800',
     textAlign: 'center',
+    letterSpacing: -1,
+    color: '#0a7ea4',
   },
-  status: {
-    marginTop: 24,
-    textAlign: 'center',
-    fontSize: 16,
-    lineHeight: 24,
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  statusText: {
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 8,
+  },
+  error: {
+    color: Colors.light.danger,
+  },
+  meta: {
+    marginTop: 10,
+    fontSize: 12,
+    opacity: 0.7,
   },
 });
 
