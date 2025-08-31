@@ -1,50 +1,76 @@
-# Welcome to your Expo app 👋
+# Knocker: A Secure IP Whitelisting App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Knocker is a self-hosted Android application built with Expo (React Native) that provides a secure and convenient way to whitelist your device's IP address with a compatible server. It is designed for users who need temporary access to protected networks or services and want a simple, reliable tool to manage it.
 
-## Get started
+## ✨ Features
 
-1. Install dependencies
+-   **Simple Setup:** A one-time setup screen to configure your server endpoint and secret token.
+-   **One-Tap Whitelisting:** A prominent "Knock" button to instantly whitelist your current IP address.
+-   **Automatic Knock:** The app automatically knocks on launch to streamline your workflow.
+-   **Background Service:** An optional background service that re-knocks every 15 minutes to ensure your access doesn't expire.
+-   **Secure Storage:** All sensitive credentials (endpoint, token) are stored securely on your device using `expo-secure-store`.
+-   **Modern UI:** A clean and intuitive interface built with Material You (Material 3) design principles.
 
-   ```bash
-   npm install
-   ```
+## 🚀 Getting Started
 
-2. Start the app
+### Prerequisites
 
-   ```bash
-   npx expo start
-   ```
+-   [Node.js](https://nodejs.org/) (LTS version recommended)
+-   [Expo CLI](https://docs.expo.dev/get-started/installation/)
+-   A compatible [Knocker server](https://github.com/faris/knocker-server) instance.
 
-In the output, you'll find options to open the app in a
+### Installation & Setup
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/knocker-android.git
+    cd knocker-android
+    ```
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
 
-## Get a fresh project
+3.  **Run the application:**
+    ```bash
+    npm start
+    ```
+    This will start the Metro bundler. You can then run the app on an Android emulator or a physical device using the Expo Go app.
 
-When you're ready, run:
+4.  **Configure the App:**
+    -   On the first launch, you will be directed to the **Setup** screen.
+    -   Enter the full URL of your Knocker server endpoint (e.g., `http://your-server.com/knock`).
+    -   Enter the secret API token for your server.
+    -   Optionally, enable the background service.
+    -   Tap **Save**.
 
-```bash
-npm run reset-project
-```
+## 🛠️ Development
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+This project follows a strict **Test-Driven Development (TDD)** methodology. All code is thoroughly tested using Jest and React Native Testing Library.
 
-## Learn more
+-   **Run all tests:**
+    ```bash
+    npm test
+    ```
 
-To learn more about developing your project with Expo, look at the following resources:
+-   **Run tests for a specific file:**
+    ```bash
+    npm test src/path/to/your/file.test.ts
+    ```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## 📄 Documentation
 
-## Join the community
+Detailed documentation for the project can be found in the `/docs` directory:
 
-Join our community of developers creating universal apps.
+-   [`project-overview.md`](./docs/project-overview.md): High-level summary of the project.
+-   [`architecture.md`](./docs/architecture.md): Explanation of the software architecture and data flow.
+-   [`design.md`](./docs/design.md): Overview of the UI/UX design and Material You implementation.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to open an issue or submit a pull request.
+
+## 📝 License
+
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
