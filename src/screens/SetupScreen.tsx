@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, TextInput, Button, StyleSheet, Text, Switch } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import { StyleSheet, Switch, useColorScheme, Platform } from 'react-native';
+import { setItem, getItem } from '../services/storage';
 import { registerBackgroundTask, unregisterBackgroundTask } from '../services/backgroundKnocker';
+import { StyledView } from '../../components/ui/StyledView';
+import { StyledText } from '../../components/ui/StyledText';
+import { StyledTextInput } from '../../components/ui/StyledTextInput';
+import { StyledButton } from '../../components/ui/StyledButton';
+import { Colors } from '../../constants/Colors';
 
 const SetupScreen = () => {
   const [endpoint, setEndpoint] = useState('');
@@ -9,14 +14,31 @@ const SetupScreen = () => {
   const [ttl, setTtl] = useState('');
   const [ipAddress, setIpAddress] = useState('');
   const [isBackgroundServiceEnabled, setIsBackgroundServiceEnabled] = useState(false);
+  const colorScheme = useColorScheme();
 
+  useEffect(() => {
+    const loadSettings = async () => {
+      const storedEndpoint = await getItem('knocker-endpoint');
+      const storedToken = await getItem('knocker-token');
+      const storedTtl = await getItem('knocker-ttl');
+      const storedIp = await getItem('knocker-ip');
+      const storedBackgroundService = await getItem('background-service-enabled');
+
+      if (storedEndpoint) setEndpoint(storedEndpoint);
+      if (storedToken) setToken(storedToken);
+      if (storedTtl) setTtl(storedTtl);
+      if (storedIp) setIpAddress(storedIp);
+      setIsBackgroundServiceEnabled(storedBackgroundService === 'true');
+    };
+    loadSettings();
+  }, []);
 
   const handleSave = async () => {
-    await SecureStore.setItemAsync('knocker-endpoint', endpoint);
-    await SecureStore.setItemAsync('knocker-token', token);
-    await SecureStore.setItemAsync('knocker-ttl', ttl);
-    await SecureStore.setItemAsync('knocker-ip', ipAddress);
-    await SecureStore.setItemAsync('background-service-enabled', isBackgroundServiceEnabled.toString());
+    await setItem('knocker-endpoint', endpoint);
+    await setItem('knocker-token', token);
+    await setItem('knocker-ttl', ttl);
+    await setItem('knocker-ip', ipAddress);
+    await setItem('background-service-enabled', isBackgroundServiceEnabled.toString());
 
     if (isBackgroundServiceEnabled) {
       await registerBackgroundTask();
@@ -25,65 +47,67 @@ const SetupScreen = () => {
     }
   };
 
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      justifyContent: 'center',
+      padding: 16,
+      maxWidth: 800,
+      width: '100%',
+      alignSelf: 'center',
+    },
+    switchContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 20,
+      marginTop: 10,
+    },
+    title: {
+      fontSize: 32,
+      fontWeight: 'bold',
+      marginBottom: 24,
+      textAlign: 'center',
+    },
+  });
+
   return (
-    <View style={styles.container}>
-      <TextInput
-        style={styles.input}
+    <StyledView style={styles.container}>
+      <StyledText style={styles.title}>Settings</StyledText>
+      <StyledTextInput
         placeholder="Knocker Endpoint"
         value={endpoint}
         onChangeText={setEndpoint}
       />
-      <TextInput
-        style={styles.input}
+      <StyledTextInput
         placeholder="Token"
         value={token}
         onChangeText={setToken}
         secureTextEntry
       />
-      <TextInput
-        style={styles.input}
+      <StyledTextInput
         placeholder="TTL (optional)"
         value={ttl}
         onChangeText={setTtl}
         keyboardType="numeric"
       />
-      <TextInput
-        style={styles.input}
+      <StyledTextInput
         placeholder="IP Address/CIDR (optional)"
         value={ipAddress}
         onChangeText={setIpAddress}
       />
-      <View style={styles.switchContainer}>
-        <Text>Enable Background Service</Text>
+      <StyledView style={styles.switchContainer}>
+        <StyledText>Enable Background Service</StyledText>
         <Switch
           value={isBackgroundServiceEnabled}
           onValueChange={setIsBackgroundServiceEnabled}
+          trackColor={{ false: '#767577', true: Colors[colorScheme ?? 'light'].tint }}
+          thumbColor={isBackgroundServiceEnabled ? Colors[colorScheme ?? 'light'].tint : '#f4f3f4'}
         />
-      </View>
-      <Button title="Save" onPress={handleSave} />
-    </View>
+      </StyledView>
+      <StyledButton title="Save" onPress={handleSave} />
+    </StyledView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 16,
-  },
-  input: {
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    marginBottom: 12,
-    paddingHorizontal: 8,
-  },
-  switchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-});
 
 export default SetupScreen;
