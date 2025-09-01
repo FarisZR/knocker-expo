@@ -16,6 +16,20 @@ const MainScreen = () => {
   const [token, setToken] = useState<string | null>(null);
   const [lastKnock, setLastKnock] = useState<Date | null>(null);
 
+  // Dynamic pill theming
+  const pillBg = useThemeColor(
+    { light: Colors.light.surfaceVariant, dark: Colors.dark.surfaceVariant },
+    'background'
+  );
+  const pillErrorBg = useThemeColor(
+    { light: '#FEE4E2', dark: Colors.dark.errorContainer },
+    'background'
+  );
+  const pillBorder = useThemeColor(
+    { light: Colors.light.outlineVariant, dark: Colors.dark.outlineVariant },
+    'text'
+  );
+
   const statusOpacity = useRef(new Animated.Value(0)).current;
 
   const animateStatus = () => {
@@ -80,13 +94,22 @@ const MainScreen = () => {
         Knocker
       </Animated.Text>
       <StyledCard animated>
-        <StyledText style={styles.sectionTitle}>Whitelist</StyledText>
         <StyledButton
           title={endpoint && token ? 'Knock Again' : 'Knock'}
           onPress={onManualKnock}
           pulse={!!(endpoint && token)}
+          variant="filled"
         />
-        <Animated.View style={{ opacity: statusOpacity }}>
+        <Animated.View
+          style={[
+            styles.pill,
+            {
+              backgroundColor: isError ? pillErrorBg : pillBg,
+              borderColor: pillBorder,
+              opacity: statusOpacity,
+            },
+          ]}
+        >
           <StyledText style={[styles.statusText, isError && styles.error]}>
             {status}
           </StyledText>
@@ -118,21 +141,24 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
     color: '#0a7ea4',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
   statusText: {
     fontSize: 15,
-    lineHeight: 22,
-    marginTop: 8,
+    lineHeight: 20,
+    marginTop: 0,
+  },
+  pill: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignSelf: 'stretch',
   },
   error: {
     color: Colors.light.danger,
   },
   meta: {
-    marginTop: 10,
+    marginTop: 6,
     fontSize: 12,
     opacity: 0.7,
   },

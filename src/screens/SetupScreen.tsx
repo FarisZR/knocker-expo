@@ -101,6 +101,7 @@ const SetupScreen = () => {
               onChangeText={setEndpoint}
               autoCapitalize="none"
               autoCorrect={false}
+              variant="outlined"
             />
             <StyledTextInput
               placeholder="Token"
@@ -109,6 +110,7 @@ const SetupScreen = () => {
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
+              variant="outlined"
             />
             <StyledText style={styles.groupLabel}>Options</StyledText>
             <StyledTextInput
@@ -116,12 +118,14 @@ const SetupScreen = () => {
               value={ttl}
               onChangeText={setTtl}
               keyboardType="numeric"
+              variant="filled"
             />
             <StyledTextInput
               placeholder="IP Address/CIDR (optional)"
               value={ipAddress}
               onChangeText={setIpAddress}
               autoCapitalize="none"
+              variant="filled"
             />
             <View style={styles.row}>
               <StyledText>Background Service</StyledText>
@@ -132,7 +136,7 @@ const SetupScreen = () => {
                 thumbColor={isBackgroundServiceEnabled ? Colors[colorScheme ?? 'light'].tint : '#f4f3f4'}
               />
             </View>
-            <StyledButton title="Save Settings" onPress={handleSave} />
+            <StyledButton title="Save Settings" onPress={handleSave} variant="filled" />
           </StyledCard>
         </StyledView>
       </ScrollView>

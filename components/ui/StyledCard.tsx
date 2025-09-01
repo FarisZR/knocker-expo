@@ -1,38 +1,66 @@
 import React, { ReactNode, useRef, useEffect } from 'react';
-import { View, StyleSheet, ViewProps, Animated, Platform } from 'react-native';
+import { StyleSheet, ViewProps, Animated, Platform } from 'react-native';
 import { useThemeColor } from '../../hooks/useThemeColor';
 import { Colors } from '../../constants/Colors';
 
+type CardVariant = 'elevated' | 'filled' | 'outlined' | 'tonal';
+
 interface StyledCardProps extends ViewProps {
   children: ReactNode;
-  elevate?: boolean;
   animated?: boolean;
   delay?: number;
+  variant?: CardVariant;
 }
 
-export function StyledCard({ children, style, elevate = true, animated = true, delay = 0, ...rest }: StyledCardProps) {
-  const bg = useThemeColor({ light: Colors.light.surface, dark: Colors.dark.surface }, 'background');
-  const border = useThemeColor({ light: Colors.light.outline, dark: Colors.dark.outline }, 'text');
+export function StyledCard({
+  children,
+  style,
+  animated = true,
+  delay = 0,
+  variant = 'elevated',
+  ...rest
+}: StyledCardProps) {
+  const light = Colors.light;
+  const dark = Colors.dark;
+
+  const surface = useThemeColor({ light: light.surface, dark: dark.surface }, 'background');
+  const surfaceVariant = useThemeColor(
+    { light: light.surfaceVariant, dark: dark.surfaceVariant },
+    'background'
+  );
+  const outline = useThemeColor({ light: light.outline, dark: dark.outline }, 'text');
+
+  const bg =
+    variant === 'tonal'
+      ? surfaceVariant
+      : variant === 'filled'
+      ? surface
+      : variant === 'elevated'
+      ? surface
+      : 'transparent';
+
+  const showBorder = variant === 'outlined';
+  const showElevation = variant === 'elevated';
 
   const opacity = useRef(new Animated.Value(animated ? 0 : 1)).current;
-  const translateY = useRef(new Animated.Value(animated ? 8 : 0)).current;
+  const translateY = useRef(new Animated.Value(animated ? 10 : 0)).current;
 
   useEffect(() => {
     if (animated) {
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 320,
+          duration: 340,
           delay,
           useNativeDriver: true,
         }),
         Animated.spring(translateY, {
-            toValue: 0,
-            friction: 8,
-            tension: 40,
-            delay,
-            useNativeDriver: true,
-        })
+          toValue: 0,
+          friction: 7,
+          tension: 38,
+          delay,
+          useNativeDriver: true,
+        }),
       ]).start();
     }
   }, [animated, delay, opacity, translateY]);
@@ -41,10 +69,11 @@ export function StyledCard({ children, style, elevate = true, animated = true, d
     <Animated.View
       style={[
         styles.card,
-        elevate && styles.elevated,
+        showElevation && styles.elevated,
         {
           backgroundColor: bg,
-          borderColor: border,
+          borderColor: showBorder ? outline : 'transparent',
+          borderWidth: showBorder ? 1 : 0,
           opacity,
           transform: [{ translateY }],
         },
@@ -60,24 +89,23 @@ export function StyledCard({ children, style, elevate = true, animated = true, d
 const styles = StyleSheet.create({
   card: {
     width: '100%',
-    borderRadius: 20,
-    padding: 20,
-    borderWidth: 1,
+    borderRadius: 28, // expressive large shape
+    padding: 24,
     overflow: 'hidden',
   },
   elevated: {
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOpacity: 0.12,
+        shadowOpacity: 0.18,
         shadowOffset: { width: 0, height: 6 },
-        shadowRadius: 12,
+        shadowRadius: 14,
       },
       android: {
-        elevation: 4,
+        elevation: 3,
       },
       default: {
-        boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+        boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
       },
     }),
   },
