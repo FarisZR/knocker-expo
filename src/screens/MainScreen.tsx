@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { StyleSheet, Animated, Easing } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { getItem } from '../services/storage';
 import { knock } from '../services/knocker';
 import { StyledView } from '../../components/ui/StyledView';
@@ -41,22 +42,29 @@ const MainScreen = () => {
     }
   };
 
-  useEffect(() => {
-    const loadAndKnock = async () => {
-      const storedEndpoint = await getItem('knocker-endpoint');
-      const storedToken = await getItem('knocker-token');
-      setEndpoint(storedEndpoint);
-      setToken(storedToken);
+  useFocusEffect(
+    React.useCallback(() => {
+      let isActive = true;
+      const loadAndKnock = async () => {
+        const storedEndpoint = await getItem('knocker-endpoint');
+        const storedToken = await getItem('knocker-token');
+        if (!isActive) return;
+        setEndpoint(storedEndpoint);
+        setToken(storedToken);
 
-      if (storedEndpoint && storedToken) {
-        await handleKnock(storedEndpoint, storedToken);
-      } else {
-        setStatus('Credentials not set. Go to Setup.');
-        animateStatus();
-      }
-    };
-    loadAndKnock();
-  }, []);
+        if (storedEndpoint && storedToken) {
+          await handleKnock(storedEndpoint, storedToken);
+        } else {
+          setStatus('Credentials not set. Go to Setup.');
+          animateStatus();
+        }
+      };
+      loadAndKnock();
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
 
   const onManualKnock = () => {
     if (endpoint && token) {
