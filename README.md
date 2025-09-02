@@ -24,8 +24,8 @@ Knocker-EXPO is a client for Knocker written in Expo (React Native) that provide
 1. **Clone the repository:**
 
     ```bash
-    git clone https://github.com/your-username/knocker-android.git
-    cd knocker-android
+    git clone https://github.com/your-username/knocker-expo.git
+    cd knocker-expo
     ```
 
 2. **Install dependencies:**
