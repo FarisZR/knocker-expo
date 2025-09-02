@@ -4,6 +4,9 @@ interface KnockResponse {
   whitelisted_entry: string;
   expires_at: number;
   expires_in_seconds: number;
+  // Optional: the server may echo back the requested TTL or max allowed TTL in some implementations.
+  requested_ttl?: number;
+  max_allowed_ttl?: number;
 }
 
 interface KnockOptions {
@@ -38,7 +41,20 @@ export const knock = async (
       headers,
     });
 
-    return response.data;
+    // Normalize server response: if the server doesn't include requested_ttl or max_allowed_ttl,
+    // return only the fields the server provided and echo the requested ttl when available.
+    const respData = response.data;
+    const out: Record<string, any> = { ...respData };
+    // Prefer server-provided values; fall back to the requested ttl only when defined.
+    if (respData.requested_ttl !== undefined) {
+      out.requested_ttl = respData.requested_ttl;
+    } else if (ttl !== undefined) {
+      out.requested_ttl = ttl;
+    }
+    if (respData.max_allowed_ttl !== undefined) {
+      out.max_allowed_ttl = respData.max_allowed_ttl;
+    }
+    return out as KnockResponse;
   } catch (err: any) {
     // If the server returned a response (non-2xx), surface a clear error using status and any server message.
     if (err?.response) {

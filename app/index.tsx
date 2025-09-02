@@ -39,6 +39,7 @@ export default function HomeScreen() {
   const [isBackgroundServiceEnabled, setIsBackgroundServiceEnabled] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(true);
   const [lastKnock, setLastKnock] = useState<Date | null>(null);
+  const [warningMessage, setWarningMessage] = useState('');
 
   const statusOpacity = useRef(new Animated.Value(0)).current;
   const settingsAnim = useRef(new Animated.Value(1)).current; // 1 = open, 0 = closed
@@ -48,9 +49,11 @@ export default function HomeScreen() {
   const theme = colorScheme === 'dark' ? Colors.dark : Colors.light;
   // Use the onErrorContainer token when available so text contrasts the errorContainer background
   const errorTextColor = theme.onErrorContainer ?? (colorScheme === 'dark' ? '#ffffff' : Colors.light.error);
+  const warningTextColor = colorScheme === 'dark' ? '#000000' : '#FFFFFF';
  
   const pillBg = theme.surfaceVariant;
   const pillErrorBg = theme.errorContainer;
+  const pillWarningBg = theme.warning;
   const pillBorder = theme.outlineVariant;
 
   const animateStatus = () => {
@@ -65,13 +68,28 @@ export default function HomeScreen() {
 
   const handleKnock = async (knockEndpoint: string, knockToken: string, options?: { ttl?: number; ip_address?: string }) => {
     try {
+      // clear any previous warning before a new request
+      setWarningMessage('');
       setStatus('Knocking...');
       animateStatus();
       const result = await knock(knockEndpoint, knockToken, options);
       setStatus(`Whitelisted: ${result.whitelisted_entry}\nExpires in: ${result.expires_in_seconds} seconds`);
       setLastKnock(new Date());
+
+      // Detect TTL capping: if a TTL was requested and the server returned a shorter expiry.
+      const requested = options?.ttl;
+      if (typeof requested === 'number' && requested > result.expires_in_seconds) {
+        setWarningMessage(
+          `TTL requested (${requested} seconds) exceeds server limit. IP allowed for ${result.expires_in_seconds} seconds.`
+        );
+      } else {
+        setWarningMessage('');
+      }
+
       animateStatus();
     } catch (error: any) {
+      // Clear warnings on error
+      setWarningMessage('');
       setStatus(`Error: ${error.message ?? String(error)}`);
       animateStatus();
     }
@@ -166,6 +184,7 @@ export default function HomeScreen() {
     }
   };
 
+  const isWarning = Boolean(warningMessage);
   const isError = status.startsWith('Error') || status.startsWith('Credentials not set');
 
   return (
@@ -186,14 +205,28 @@ export default function HomeScreen() {
               style={[
                 styles.pill,
                 {
-                  backgroundColor: isError ? pillErrorBg : pillBg,
+                  backgroundColor: isError ? pillErrorBg : isWarning ? pillWarningBg : pillBg,
                   borderColor: pillBorder,
                   opacity: statusOpacity,
                 },
               ]}
             >
-              <StyledText style={[styles.statusText, isError ? { color: errorTextColor } : undefined]}>{status}</StyledText>
-              {!isError && lastKnock && <StyledText style={styles.meta}>Last knock: {lastKnock.toLocaleTimeString()}</StyledText>}
+              <StyledText
+                style={[
+                  styles.statusText,
+                  isError ? { color: errorTextColor } : isWarning ? { color: warningTextColor } : undefined,
+                ]}
+              >
+                {status}
+              </StyledText>
+
+              {isWarning && warningMessage ? (
+                <StyledText style={[styles.statusText, { color: warningTextColor, marginTop: 6, fontWeight: '600' }]}>
+                  {warningMessage}
+                </StyledText>
+              ) : null}
+
+              {!isError && !isWarning && lastKnock && <StyledText style={styles.meta}>Last knock: {lastKnock.toLocaleTimeString()}</StyledText>}
             </Animated.View>
 
             <TouchableOpacity onPress={() => toggleSettings()} style={styles.settingsToggle}>
