@@ -35,7 +35,7 @@ describe('Knocker Service', () => {
 
       mock.onPost(`${endpoint}/knock`).reply(401, { error: 'Unauthorized' });
 
-      await expect(knock(endpoint, token)).rejects.toThrow('Request failed with status code 401');
+      await expect(knock(endpoint, token)).rejects.toThrow('401 Unauthorized');
     });
 
     it('should throw an error for a forbidden request', async () => {
@@ -45,7 +45,7 @@ describe('Knocker Service', () => {
 
       mock.onPost(`${endpoint}/knock`).reply(403, { error: 'Forbidden' });
 
-      await expect(knock(endpoint, token, { ip_address: ipAddress })).rejects.toThrow('Request failed with status code 403');
+      await expect(knock(endpoint, token, { ip_address: ipAddress })).rejects.toThrow('403 Forbidden — are you sure your token has enough permissions for all options?');
     });
 
     it('should throw an error for a bad request', async () => {
@@ -55,7 +55,7 @@ describe('Knocker Service', () => {
   
         mock.onPost(`${endpoint}/knock`).reply(400, { error: 'Bad Request' });
   
-        await expect(knock(endpoint, token, { ip_address: ipAddress })).rejects.toThrow('Request failed with status code 400');
+        await expect(knock(endpoint, token, { ip_address: ipAddress })).rejects.toThrow('400 Bad Request');
     });
 
     it('should handle network errors', async () => {
@@ -64,7 +64,7 @@ describe('Knocker Service', () => {
 
       mock.onPost(`${endpoint}/knock`).networkError();
 
-      await expect(knock(endpoint, token)).rejects.toThrow('Network Error');
+      await expect(knock(endpoint, token)).rejects.toThrow('Network Error — request sent but no response received (possible CORS, network failure, or server blocked the response)');
     });
   });
 });
