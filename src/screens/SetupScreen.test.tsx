@@ -21,10 +21,10 @@ describe('SetupScreen', () => {
 
     expect(screen.getByPlaceholderText('Knocker Endpoint')).toBeTruthy();
     expect(screen.getByPlaceholderText('Token')).toBeTruthy();
-    expect(screen.getByPlaceholderText('TTL (optional)')).toBeTruthy();
+    expect(screen.getByPlaceholderText('TTL (seconds, optional)')).toBeTruthy();
     expect(screen.getByPlaceholderText('IP Address/CIDR (optional)')).toBeTruthy();
-    expect(screen.getByText('Save')).toBeTruthy();
-    expect(screen.getByText('Enable Background Service')).toBeTruthy();
+    expect(screen.getByText('Save Settings')).toBeTruthy();
+    expect(screen.getByText('Background Service')).toBeTruthy();
   });
 
   it('should save the form data to secure store', async () => {
@@ -32,7 +32,7 @@ describe('SetupScreen', () => {
 
     fireEvent.changeText(screen.getByPlaceholderText('Knocker Endpoint'), 'http://localhost:8080');
     fireEvent.changeText(screen.getByPlaceholderText('Token'), 'test-token');
-    await fireEvent.press(screen.getByText('Save'));
+    await fireEvent.press(screen.getByText('Save Settings'));
 
     expect(mockSetItemAsync).toHaveBeenCalledWith('knocker-endpoint', 'http://localhost:8080');
     expect(mockSetItemAsync).toHaveBeenCalledWith('knocker-token', 'test-token');
@@ -42,7 +42,7 @@ describe('SetupScreen', () => {
     render(<SetupScreen />);
     
     fireEvent(screen.getByRole('switch'), 'onValueChange', true);
-    await fireEvent.press(screen.getByText('Save'));
+    await fireEvent.press(screen.getByText('Save Settings'));
 
     expect(mockRegisterBackgroundTask).toHaveBeenCalled();
     expect(mockSetItemAsync).toHaveBeenCalledWith('background-service-enabled', 'true');
@@ -54,7 +54,7 @@ describe('SetupScreen', () => {
     render(<SetupScreen />);
 
     fireEvent(screen.getByRole('switch'), 'onValueChange', false); // This will toggle it off
-    await fireEvent.press(screen.getByText('Save'));
+    await fireEvent.press(screen.getByText('Save Settings'));
 
     expect(mockUnregisterBackgroundTask).toHaveBeenCalled();
     expect(mockSetItemAsync).toHaveBeenCalledWith('background-service-enabled', 'false');

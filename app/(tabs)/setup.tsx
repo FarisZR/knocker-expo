@@ -1,5 +1,5 @@
-import SetupScreen from '../../src/screens/SetupScreen';
+import { Redirect } from 'expo-router';
 
-export default function Setup() {
-  return <SetupScreen />;
+export default function SetupRedirect() {
+  return <Redirect href="/" />;
 }
