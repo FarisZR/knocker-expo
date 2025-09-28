@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.fariszr.knocker"
     },
     "web": {
       "bundler": "metro",
@@ -34,7 +35,13 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "./plugins/withNetworkSecurityConfig",
+        {
+          "domains": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
