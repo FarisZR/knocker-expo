@@ -20,7 +20,7 @@ import StyledCard from '../components/ui/StyledCard';
 import { StyledTextInput } from '../components/ui/StyledTextInput';
 import { Colors } from '../constants/Colors';
 import { getItem, setItem } from '../src/services/storage';
-import { registerBackgroundTask, unregisterBackgroundTask } from '../src/services/backgroundKnocker';
+import { registerBackgroundTask, unregisterBackgroundTask, getTtlWarningMessage } from '../src/services/backgroundKnocker';
 import { knock } from '../src/services/knocker';
 import { getKnockOptions } from '../src/services/knockOptions';
 
@@ -155,6 +155,15 @@ export default function HomeScreen() {
   };
 
   const handleSave = async () => {
+    // First, get the normalized options to check Android scheduler compatibility
+    const options = await getKnockOptions();
+    
+    // Check if TTL is compatible with Android scheduler when background service is enabled
+    if (isBackgroundServiceEnabled && !options.isAndroidSchedulerCompatible) {
+      setWarningMessage(getTtlWarningMessage(options.ttl || 0));
+      return; // Don't proceed with save if TTL is incompatible
+    }
+    
     await setItem('knocker-endpoint', endpoint);
     await setItem('knocker-token', token);
     await setItem('knocker-ttl', ttl);
@@ -172,7 +181,6 @@ export default function HomeScreen() {
 
     // Auto-knock after save if credentials present
     if (endpoint && token) {
-      const options = await getKnockOptions();
       await handleKnock(endpoint, token, options);
       // close settings after successful save
       await toggleSettings(false);

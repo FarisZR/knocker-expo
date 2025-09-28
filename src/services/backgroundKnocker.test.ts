@@ -3,6 +3,7 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import * as SecureStore from 'expo-secure-store';
 import { registerBackgroundTask, unregisterBackgroundTask, BACKGROUND_FETCH_TASK, taskExecutor } from './backgroundKnocker';
 import * as Knocker from './knocker';
+import { normalizeTtlForAndroidScheduler } from './knockOptions';
 
 jest.mock('expo-task-manager', () => ({
   defineTask: jest.fn(),
@@ -85,5 +86,19 @@ describe('BackgroundKnocker', () => {
         expect(mockKnock).toHaveBeenCalledWith('http://localhost:8080', 'test-token');
         expect(result).toBe(BackgroundFetch.BackgroundFetchResult.Failed);
       });
-  });
+
+   it('should return NoData when TTL is below Android scheduler minimum', async () => {
+     mockGetItemAsync
+       .mockResolvedValueOnce('http://localhost:8080')
+       .mockResolvedValueOnce('test-token')
+       .mockResolvedValueOnce('300') // TTL below minimum (900 seconds)
+       .mockResolvedValueOnce(undefined); // no IP
+     mockKnock.mockResolvedValue({ whitelisted_entry: '1.2.3.4', expires_in_seconds: 3600 });
+
+     const result = await taskExecutor();
+
+     expect(mockKnock).not.toHaveBeenCalled();
+     expect(result).toBe(BackgroundFetch.BackgroundFetchResult.NoData);
+   });
+ });
 });

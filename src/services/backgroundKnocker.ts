@@ -2,11 +2,40 @@ import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as SecureStore from 'expo-secure-store';
 import { knock } from './knocker';
+import { normalizeTtlForAndroidScheduler } from './knockOptions';
 
 /**
  * Name of the background fetch task.
  */
 export const BACKGROUND_FETCH_TASK = 'background-knocker-task';
+
+/**
+ * Android scheduler minimum interval in seconds (15 minutes).
+ */
+export const ANDROID_SCHEDULER_MIN_INTERVAL = 15 * 60; // 900 seconds
+
+/**
+ * Validates if TTL is compatible with Android scheduler requirements.
+ * @param ttl TTL value in seconds
+ * @returns true if TTL is valid for Android scheduler, false otherwise
+ */
+export function isTtlCompatibleWithAndroidScheduler(ttl: number): boolean {
+  return ttl >= ANDROID_SCHEDULER_MIN_INTERVAL;
+}
+
+/**
+ * Gets warning message for TTL that's below Android scheduler threshold.
+ * @param ttl TTL value in seconds
+ * @returns Warning message or empty string if TTL is valid
+ */
+export function getTtlWarningMessage(ttl: number): string {
+  if (!isTtlCompatibleWithAndroidScheduler(ttl)) {
+    const minutes = Math.ceil(ANDROID_SCHEDULER_MIN_INTERVAL / 60);
+    return `TTL (${ttl}s) is below Android's minimum scheduler interval (${minutes} minutes). Background knocks may not work as expected.`;
+  }
+  return '';
+}
+
 
 /**
  * Task executor invoked by TaskManager when the background fetch fires.
@@ -20,16 +49,26 @@ export const taskExecutor = async () => {
 
     if (endpoint && token) {
       const ttlNum = ttlRaw ? Number(ttlRaw) : undefined;
-      const hasOptions = (typeof ttlNum === 'number' && !isNaN(ttlNum)) || !!ip;
-      if (hasOptions) {
-        await knock(endpoint, token, {
-          ttl: typeof ttlNum === 'number' && !isNaN(ttlNum) ? ttlNum : undefined,
-          ip_address: ip || undefined,
-        });
+      const ttlObj = normalizeTtlForAndroidScheduler(ttlNum);
+      
+      // Only proceed with knock if TTL is compatible with Android scheduler
+      if (ttlObj.isAndroidSchedulerCompatible) {
+        const hasOptions = (typeof ttlObj.effectiveTtl === 'number' && !isNaN(ttlObj.effectiveTtl)) || !!ip;
+        if (hasOptions) {
+          await knock(endpoint, token, {
+            ttl: ttlObj.effectiveTtl,
+            ip_address: ip || undefined,
+          });
+        } else {
+          await knock(endpoint, token);
+        }
+        return BackgroundFetch.BackgroundFetchResult.NewData;
       } else {
-        await knock(endpoint, token);
+        // If TTL is not compatible, return NoData to indicate no action was taken
+        // However, we should still allow the background service to continue running
+        // so that if the user updates the TTL later, it will work
+        return BackgroundFetch.BackgroundFetchResult.NoData;
       }
-      return BackgroundFetch.BackgroundFetchResult.NewData;
     } else {
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }

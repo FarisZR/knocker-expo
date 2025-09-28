@@ -67,6 +67,7 @@ The Knocker app uses a small, modular architecture optimized for testability and
 - The app avoids registering background tasks on web builds (`Platform.OS === 'web'`).
 - Registration helpers are defensive: they return early when required APIs are missing (useful for CI/test environments).
 - When background task runs, it only passes TTL/IP options to the `knock()` call if they are present and valid.
+- The Android scheduler has a minimum interval of 15 minutes (900 seconds). If a TTL below this threshold is set, the background service will not run and a warning will be shown to the user.
 
 ## 7. Testing & Migration Considerations
 
