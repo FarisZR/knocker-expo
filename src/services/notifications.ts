@@ -1,9 +1,19 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { t } from './localization';
+
 const ANDROID_CHANNEL_ID = 'background-knocker-success';
 
 let handlerConfigured = false;
+
+export type NotificationErrorReporter = (error: unknown) => void;
+
+let notificationErrorReporter: NotificationErrorReporter | undefined;
+
+export function setNotificationErrorReporter(reporter?: NotificationErrorReporter) {
+  notificationErrorReporter = reporter;
+}
 
 function ensureNotificationHandlerConfigured() {
   if (handlerConfigured) {
@@ -23,20 +33,49 @@ function ensureNotificationHandlerConfigured() {
   handlerConfigured = true;
 }
 
-async function ensureAndroidChannelAsync() {
+async function ensureAndroidChannelAsync(): Promise<boolean> {
   if (Platform.OS !== 'android') {
-    return;
+    return true;
   }
 
-  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
-    name: 'Knocker background status',
-    importance: Notifications.AndroidImportance.MIN,
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.Private,
-    sound: null,
-    vibrationPattern: [0],
-    enableVibrate: false,
-    enableLights: false,
-  });
+  try {
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+      name: 'Knocker background status',
+      importance: Notifications.AndroidImportance.MIN,
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
+      sound: undefined,
+      vibrationPattern: [0],
+      enableVibrate: false,
+      enableLights: false,
+    });
+    return true;
+  } catch (e) {
+    // Fail gracefully during app startup — log details in dev only to avoid
+    // noisy reports in production. Use console.error because there is no
+    // centralized logger in this project.
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.error('Failed to create Android notification channel:', e);
+    }
+    return false;
+  }
+}
+
+function logNotificationSchedulingFailure(error: unknown) {
+  // Prefer a centralized logger when available.
+  if (typeof console !== 'undefined' && typeof console.error === 'function') {
+    console.error('Failed to schedule background success notification:', error);
+  }
+
+  const reporter = notificationErrorReporter;
+  if (typeof reporter === 'function') {
+    try {
+      reporter(error);
+    } catch (reportError) {
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn('Non-fatal notification error reporter failed:', reportError);
+      }
+    }
+  }
 }
 
 function isPermissionGranted(status: Notifications.NotificationPermissionsStatus): boolean {
@@ -58,9 +97,9 @@ function isPermissionGranted(status: Notifications.NotificationPermissionsStatus
   return false;
 }
 
-export async function initializeNotificationService(): Promise<void> {
+export async function initializeNotificationService(): Promise<boolean> {
   ensureNotificationHandlerConfigured();
-  await ensureAndroidChannelAsync();
+  return ensureAndroidChannelAsync();
 }
 
 export async function hasNotificationPermissions(): Promise<boolean> {
@@ -74,8 +113,7 @@ export async function requestNotificationPermissions(): Promise<boolean> {
 
   const existing = await Notifications.getPermissionsAsync();
   if (isPermissionGranted(existing)) {
-    await ensureAndroidChannelAsync();
-    return true;
+    return ensureAndroidChannelAsync();
   }
 
   const response = await Notifications.requestPermissionsAsync({
@@ -83,18 +121,17 @@ export async function requestNotificationPermissions(): Promise<boolean> {
       allowAlert: true,
       allowBadge: false,
       allowSound: false,
-      allowAnnouncements: false,
       provideAppNotificationSettings: false,
       allowCriticalAlerts: false,
       allowProvisional: true,
     },
   });
 
-  const granted = isPermissionGranted(response);
-  if (granted) {
-    await ensureAndroidChannelAsync();
+  if (!isPermissionGranted(response)) {
+    return false;
   }
-  return granted;
+
+  return ensureAndroidChannelAsync();
 }
 
 export interface BackgroundSuccessNotificationPayload {
@@ -114,26 +151,41 @@ export async function sendBackgroundSuccessNotification(
     return;
   }
 
-  await ensureAndroidChannelAsync();
+  const channelConfigured = await ensureAndroidChannelAsync();
+  if (!channelConfigured) {
+    logNotificationSchedulingFailure(
+      new Error('Android notification channel is unavailable; notification will not be scheduled.')
+    );
+    return;
+  }
 
-  const expires =
+  const title = t('background.success');
+  const expiryText =
     typeof payload.expiresInSeconds === 'number'
-      ? `Expires in ${payload.expiresInSeconds} seconds`
-      : 'Expiry unknown';
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Background knock succeeded',
-      body: `${payload.whitelistedEntry} – ${expires}`,
-      data: {
-        type: 'background-knock-success',
-        endpoint: payload.endpoint,
-        whitelistedEntry: payload.whitelistedEntry,
-        expiresInSeconds: payload.expiresInSeconds,
-      },
-      sound: null,
-      priority: Notifications.AndroidNotificationPriority.MIN,
-    },
-    trigger: null,
+      ? t('background.expiresIn', { seconds: payload.expiresInSeconds })
+      : t('background.expiryUnknown');
+  const body = t('background.body', {
+    whitelistedEntry: payload.whitelistedEntry,
+    expiry: expiryText,
   });
+
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data: {
+          type: 'background-knock-success',
+          endpoint: payload.endpoint,
+          whitelistedEntry: payload.whitelistedEntry,
+          expiresInSeconds: payload.expiresInSeconds,
+        },
+        sound: undefined,
+        priority: Notifications.AndroidNotificationPriority.MIN,
+      },
+      trigger: null,
+    });
+  } catch (error) {
+    logNotificationSchedulingFailure(error);
+  }
 }

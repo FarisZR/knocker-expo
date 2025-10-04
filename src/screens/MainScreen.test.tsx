@@ -1,16 +1,18 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { Platform } from 'react-native';
-import MainScreen from './MainScreen';
+// @ts-nocheck
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { startActivityAsync } from 'expo-intent-launcher';
 import * as SecureStore from 'expo-secure-store';
+import React from 'react';
+import { Platform } from 'react-native';
+import * as BackgroundKnocker from '../services/backgroundKnocker';
 import * as Knocker from '../services/knocker';
 import {
-  initializeNotificationService,
   hasNotificationPermissions,
+  initializeNotificationService,
   requestNotificationPermissions,
 } from '../services/notifications';
-import * as IntentLauncher from 'expo-intent-launcher';
-import * as BackgroundKnocker from '../services/backgroundKnocker';
+import MainScreen from './MainScreen';
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(),
@@ -21,7 +23,7 @@ jest.mock('expo-secure-store', () => ({
 jest.mock('../services/knocker');
 
 jest.mock('../services/notifications', () => ({
-  initializeNotificationService: jest.fn().mockResolvedValue(undefined),
+  initializeNotificationService: jest.fn().mockResolvedValue(true),
   hasNotificationPermissions: jest.fn().mockResolvedValue(false),
   requestNotificationPermissions: jest.fn().mockResolvedValue(true),
 }));
@@ -40,6 +42,14 @@ jest.mock('../services/backgroundKnocker', () => {
   };
 });
 
+jest.mock('expo-intent-launcher', () => ({
+  __esModule: true,
+  ActivityAction: {
+    IGNORE_BATTERY_OPTIMIZATION_SETTINGS: 'android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS',
+  },
+  startActivityAsync: jest.fn(),
+}));
+
 const mockKnock = Knocker.knock as jest.Mock;
 const mockGetItemAsync = SecureStore.getItemAsync as jest.Mock;
 const mockRequestNotificationPermissions = requestNotificationPermissions as jest.Mock;
@@ -49,7 +59,7 @@ const mockInitializeNotificationService = initializeNotificationService as jest.
 const mockEnsureBackgroundTaskRegistered = BackgroundKnocker.ensureBackgroundTaskRegistered as jest.Mock;
 const mockGetLastBackgroundRunMetadata = BackgroundKnocker.getLastBackgroundRunMetadata as jest.Mock;
 const mockGetBackgroundNotificationsEnabled = BackgroundKnocker.getBackgroundNotificationsEnabled as jest.Mock;
-const mockStartActivityAsync = IntentLauncher.startActivityAsync as jest.Mock;
+const mockStartActivityAsync = startActivityAsync as jest.Mock;
 
 describe('MainScreen', () => {
   beforeEach(() => {
@@ -59,9 +69,9 @@ describe('MainScreen', () => {
     mockGetItemAsync.mockResolvedValue(null);
 
     mockKnock.mockReset();
-    mockRequestNotificationPermissions.mockReset();
-    mockHasNotificationPermissions.mockReset().mockResolvedValue(false);
-    mockInitializeNotificationService.mockReset().mockResolvedValue(undefined);
+  mockRequestNotificationPermissions.mockReset();
+  mockHasNotificationPermissions.mockReset().mockResolvedValue(false);
+  mockInitializeNotificationService.mockReset().mockResolvedValue(true);
 
     mockEnsureBackgroundTaskRegistered.mockReset().mockResolvedValue(undefined);
     mockGetLastBackgroundRunMetadata.mockReset().mockResolvedValue(null);

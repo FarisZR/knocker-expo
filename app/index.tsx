@@ -1,46 +1,45 @@
+import * as IntentLauncher from 'expo-intent-launcher';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  StyleSheet,
   Animated,
+  AppState,
   Easing,
+  KeyboardAvoidingView,
+  LayoutAnimation,
   Platform,
   ScrollView,
-  KeyboardAvoidingView,
-  View,
+  StyleSheet,
   Switch,
   TouchableOpacity,
-  LayoutAnimation,
   UIManager,
   useColorScheme,
-  AppState,
+  View,
 } from 'react-native';
-import * as IntentLauncher from 'expo-intent-launcher';
-import { StyledView } from '../components/ui/StyledView';
-import { StyledText } from '../components/ui/StyledText';
 import { StyledButton } from '../components/ui/StyledButton';
 import StyledCard from '../components/ui/StyledCard';
+import { StyledText } from '../components/ui/StyledText';
 import { StyledTextInput } from '../components/ui/StyledTextInput';
+import { StyledView } from '../components/ui/StyledView';
 import { Colors } from '../constants/Colors';
-import { getItem, setItem } from '../src/services/storage';
 import {
-  registerBackgroundTask,
-  unregisterBackgroundTask,
-  getTtlWarningMessage,
-  ensureBackgroundTaskRegistered,
-  getLastBackgroundRunMetadata,
   BACKGROUND_STALE_THRESHOLD_MS,
-  clearBackgroundRunMetadata,
-  getBackgroundNotificationsEnabled,
-  setBackgroundNotificationsEnabled,
   BackgroundRunMetadata,
+  clearBackgroundRunMetadata,
+  ensureBackgroundTaskRegistered,
+  getBackgroundNotificationsEnabled,
+  getLastBackgroundRunMetadata,
+  registerBackgroundTask,
+  setBackgroundNotificationsEnabled,
+  unregisterBackgroundTask
 } from '../src/services/backgroundKnocker';
 import { knock } from '../src/services/knocker';
 import { getKnockOptions } from '../src/services/knockOptions';
 import {
-  initializeNotificationService,
   hasNotificationPermissions,
+  initializeNotificationService,
   requestNotificationPermissions,
 } from '../src/services/notifications';
+import { getItem, setItem } from '../src/services/storage';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   // Enable LayoutAnimation on Android
@@ -81,9 +80,15 @@ export default function HomeScreen() {
   const pillBorder = theme.outlineVariant;
 
   useEffect(() => {
-    initializeNotificationService().catch((error) => {
-      console.warn('Notification service init failed:', error);
-    });
+    initializeNotificationService()
+      .then((channelConfigured) => {
+        if (!channelConfigured) {
+          console.warn('Notification channel configuration failed; background notifications may not be shown.');
+        }
+      })
+      .catch((error) => {
+        console.warn('Notification service init failed:', error);
+      });
   }, []);
 
   const refreshBackgroundStatus = useCallback(
@@ -218,7 +223,10 @@ export default function HomeScreen() {
       ) {
         hasRequestedNotificationPermissionRef.current = true;
         try {
-          await requestNotificationPermissions();
+          const granted = await requestNotificationPermissions();
+          if (!granted) {
+            console.warn('Notification permission request was denied or channel setup failed.');
+          }
         } catch (permissionError) {
           console.warn('Notification permission request failed:', permissionError);
         }
@@ -344,8 +352,9 @@ export default function HomeScreen() {
 
     // Check if TTL is compatible with Android scheduler when background service is enabled
     if (isBackgroundServiceEnabled && !options.isAndroidSchedulerCompatible) {
-      const minutes = Math.ceil(options.androidSchedulerMinimum / 60);
-      setWarningMessage(`Background service requires TTL >= ${minutes} minutes (currently ${options.ttl ?? 0}s).`);
+  const minutes = Math.ceil(options.androidSchedulerMinimum / 60);
+  const ttlLabel = options.ttl != null ? `${options.ttl}s` : 'not set';
+  setWarningMessage(`Background service requires TTL >= ${minutes} minutes (currently ${ttlLabel}).`);
       return; // Don't proceed with save if TTL is incompatible
     }
 

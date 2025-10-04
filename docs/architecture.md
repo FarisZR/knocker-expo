@@ -62,6 +62,7 @@ The Knocker app uses a small, modular architecture optimized for testability and
 - `background-service-enabled`
 - `settings-open`
 - `background-notifications-enabled`
+  Controls whether background success notifications (local OS alerts dispatched via `sendBackgroundSuccessNotification` in `backgroundKnocker.ts`) are delivered when the app is in the background. Defaults to enabled (`true`) so the background worker can surface successful knocks initiated outside the foreground UI. Toggle `background-service-enabled` to start/stop the background fetch process itself; disable `background-notifications-enabled` only when you want the worker to keep running without emitting notifications.
 - `background-last-run`
 
 ## 6. Background Tasks & Platform Guards
