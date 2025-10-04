@@ -14,6 +14,7 @@ import {
   useColorScheme,
   AppState,
 } from 'react-native';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { StyledView } from '../components/ui/StyledView';
 import { StyledText } from '../components/ui/StyledText';
 import { StyledButton } from '../components/ui/StyledButton';
@@ -60,6 +61,8 @@ export default function HomeScreen() {
   const [warningMessage, setWarningMessage] = useState('');
   const [backgroundStatusMessage, setBackgroundStatusMessage] = useState('');
   const [backgroundMetadata, setBackgroundMetadata] = useState<BackgroundRunMetadata | null>(null);
+  const [backgroundBatteryHint, setBackgroundBatteryHint] = useState('');
+  const [showBatteryOptimizationPrompt, setShowBatteryOptimizationPrompt] = useState(false);
 
   const statusOpacity = useRef(new Animated.Value(0)).current;
   const settingsAnim = useRef(new Animated.Value(1)).current; // 1 = open, 0 = closed
@@ -89,11 +92,15 @@ export default function HomeScreen() {
       if (!enabled) {
         setBackgroundMetadata(null);
         setBackgroundStatusMessage('');
+        setBackgroundBatteryHint('');
+        setShowBatteryOptimizationPrompt(false);
         return;
       }
 
       const metadata = await getLastBackgroundRunMetadata();
       setBackgroundMetadata(metadata);
+      setBackgroundBatteryHint('');
+      setShowBatteryOptimizationPrompt(false);
 
       if (!metadata) {
         setBackgroundStatusMessage('Background knock has not run yet.');
@@ -112,16 +119,32 @@ export default function HomeScreen() {
       switch (metadata.status) {
         case 'success':
           if (ageMs > BACKGROUND_STALE_THRESHOLD_MS) {
-            setBackgroundStatusMessage(`Background knock stale. Last success ${ageMinutes} minute${ageMinutes === 1 ? '' : 's'} ago.`);
+            setBackgroundStatusMessage(
+              `Background knock stale. Last success ${ageMinutes} minute${ageMinutes === 1 ? '' : 's'} ago.`
+            );
           } else {
-            setBackgroundStatusMessage(`Background knock succeeded ${ageMinutes} minute${ageMinutes === 1 ? '' : 's'} ago.`);
+            setBackgroundStatusMessage(
+              `Background knock succeeded ${ageMinutes} minute${ageMinutes === 1 ? '' : 's'} ago.`
+            );
           }
           break;
         case 'failed':
           setBackgroundStatusMessage('Background knock failed during the last run. Open the app to retry.');
+          if (Platform.OS === 'android') {
+            setBackgroundBatteryHint(
+              'Android may be stopping Knocker in the background. Disable battery optimizations for Knocker to improve reliability.'
+            );
+            setShowBatteryOptimizationPrompt(true);
+          }
           break;
         case 'restricted':
           setBackgroundStatusMessage('Background fetch is restricted by the OS. Open the app periodically to keep access alive.');
+          if (Platform.OS === 'android') {
+            setBackgroundBatteryHint(
+              'Disable Android battery optimizations for Knocker so scheduled knocks can keep running even when the device is idle.'
+            );
+            setShowBatteryOptimizationPrompt(true);
+          }
           break;
         case 'missing-credentials':
           setBackgroundStatusMessage('Background knock skipped because credentials were missing.');
@@ -134,6 +157,23 @@ export default function HomeScreen() {
     },
     [isBackgroundServiceEnabled]
   );
+
+  const handleOpenBatterySettings = useCallback(async () => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    const activityAction =
+      (IntentLauncher.ActivityAction as { IGNORE_BATTERY_OPTIMIZATION_SETTINGS?: string } | undefined)
+        ?.IGNORE_BATTERY_OPTIMIZATION_SETTINGS;
+    const action = activityAction ?? 'android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS';
+
+    try {
+      await IntentLauncher.startActivityAsync(action);
+    } catch (error) {
+      console.warn('Unable to open battery optimization settings:', error);
+    }
+  }, []);
 
   const animateStatus = () => {
     statusOpacity.setValue(0);
@@ -249,6 +289,8 @@ export default function HomeScreen() {
     } else if (!isBackgroundServiceEnabled) {
       setBackgroundMetadata(null);
       setBackgroundStatusMessage('');
+      setBackgroundBatteryHint('');
+      setShowBatteryOptimizationPrompt(false);
     }
   }, [isBackgroundServiceEnabled, refreshBackgroundStatus]);
 
@@ -344,7 +386,9 @@ export default function HomeScreen() {
     backgroundStatusMessage.startsWith('Background knock failed') ||
     backgroundStatusMessage.startsWith('Background fetch');
 
-  const isWarning = Boolean(warningMessage) || backgroundStatusIsWarning;
+  const hasBackgroundBatteryHint = backgroundBatteryHint.length > 0;
+
+  const isWarning = Boolean(warningMessage) || backgroundStatusIsWarning || hasBackgroundBatteryHint;
   const isError = status.startsWith('Error') || status.startsWith('Credentials not set');
 
   return (
@@ -395,6 +439,26 @@ export default function HomeScreen() {
                 >
                   {backgroundStatusMessage}
                 </StyledText>
+              ) : null}
+
+              {isBackgroundServiceEnabled && hasBackgroundBatteryHint ? (
+                <StyledText
+                  style={[
+                    styles.backgroundHintText,
+                    { color: warningTextColor },
+                  ]}
+                >
+                  {backgroundBatteryHint}
+                </StyledText>
+              ) : null}
+
+              {isBackgroundServiceEnabled && showBatteryOptimizationPrompt && Platform.OS === 'android' ? (
+                <StyledButton
+                  title="Open battery optimization settings"
+                  onPress={handleOpenBatterySettings}
+                  variant="outlined"
+                  style={styles.batteryButton}
+                />
               ) : null}
 
               {!isError && !isWarning && lastKnock && (
@@ -505,6 +569,16 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     opacity: 0.7,
+  },
+  backgroundHintText: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
+    opacity: 0.85,
+  },
+  batteryButton: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
   },
   settingsToggle: {
     marginTop: 12,

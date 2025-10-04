@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 import MainScreen from './MainScreen';
 import * as SecureStore from 'expo-secure-store';
 import * as Knocker from '../services/knocker';
@@ -8,6 +9,7 @@ import {
   hasNotificationPermissions,
   requestNotificationPermissions,
 } from '../services/notifications';
+import * as IntentLauncher from 'expo-intent-launcher';
 import * as BackgroundKnocker from '../services/backgroundKnocker';
 
 jest.mock('expo-secure-store', () => ({
@@ -47,6 +49,7 @@ const mockInitializeNotificationService = initializeNotificationService as jest.
 const mockEnsureBackgroundTaskRegistered = BackgroundKnocker.ensureBackgroundTaskRegistered as jest.Mock;
 const mockGetLastBackgroundRunMetadata = BackgroundKnocker.getLastBackgroundRunMetadata as jest.Mock;
 const mockGetBackgroundNotificationsEnabled = BackgroundKnocker.getBackgroundNotificationsEnabled as jest.Mock;
+const mockStartActivityAsync = IntentLauncher.startActivityAsync as jest.Mock;
 
 describe('MainScreen', () => {
   beforeEach(() => {
@@ -63,6 +66,7 @@ describe('MainScreen', () => {
     mockEnsureBackgroundTaskRegistered.mockReset().mockResolvedValue(undefined);
     mockGetLastBackgroundRunMetadata.mockReset().mockResolvedValue(null);
     mockGetBackgroundNotificationsEnabled.mockReset().mockResolvedValue(true);
+    mockStartActivityAsync.mockClear();
   });
 
   const primeCredentials = (endpoint: string, token: string) => {
@@ -138,5 +142,55 @@ describe('MainScreen', () => {
 
     expect(mockKnock).toHaveBeenLastCalledWith('http://localhost:8080', 'test-token', expect.any(Object));
     expect(mockRequestNotificationPermissions).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces Android battery optimization guidance when the last background knock failed', async () => {
+    const originalOS = Platform.OS;
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      get: () => 'android',
+    });
+
+    mockGetItemAsync.mockImplementation((key: string) => {
+      switch (key) {
+        case 'background-service-enabled':
+          return Promise.resolve('true');
+        case 'settings-open':
+          return Promise.resolve('true');
+        default:
+          return Promise.resolve(null);
+      }
+    });
+
+    const metadata = {
+      timestamp: new Date().toISOString(),
+      status: 'failed' as const,
+      detail: 'Network timeout',
+    };
+    mockGetLastBackgroundRunMetadata.mockResolvedValue(metadata);
+
+    render(<MainScreen />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Background knock failed during the last run. Open the app to retry.')).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText('Android may be stopping Knocker in the background. Disable battery optimizations for Knocker to improve reliability.')
+    ).toBeTruthy();
+
+    const button = screen.getByText('Open battery optimization settings');
+    fireEvent.press(button);
+
+    await waitFor(() => {
+      expect(mockStartActivityAsync).toHaveBeenCalledWith('android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS');
+    });
+
+    Object.defineProperty(Platform, 'OS', {
+      configurable: true,
+      get: () => originalOS,
+    });
+
+    mockGetItemAsync.mockImplementation(() => Promise.resolve(null));
   });
 });

@@ -8,6 +8,7 @@ Knocker-EXPO is a client for Knocker written in Expo (React Native) that provide
 - **One-Tap Whitelisting:** A prominent "Knock" button to instantly whitelist your current IP address.
 - **Automatic Knock:** The app automatically knocks on launch to streamline your workflow.
 - **Background Service:** An optional background service that re-knocks every 15 minutes to ensure your access doesn't expire.
+- **Reliability Hints:** Automatic detection of missed background runs with Android-specific guidance to disable battery optimizations when needed.
 - **Secure Storage:** All sensitive credentials (endpoint, token) are stored securely on your device using `expo-secure-store`.
 - **Modern UI:** A clean and intuitive interface built with Material You (Material 3) design principles.
 

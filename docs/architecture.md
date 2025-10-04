@@ -61,6 +61,8 @@ The Knocker app uses a small, modular architecture optimized for testability and
 - `knocker-ip`
 - `background-service-enabled`
 - `settings-open`
+- `background-notifications-enabled`
+- `background-last-run`
 
 ## 6. Background Tasks & Platform Guards
 
@@ -68,6 +70,8 @@ The Knocker app uses a small, modular architecture optimized for testability and
 - Registration helpers are defensive: they return early when required APIs are missing (useful for CI/test environments).
 - When background task runs, it only passes TTL/IP options to the `knock()` call if they are present and valid.
 - The Android scheduler has a minimum interval of 15 minutes (900 seconds). If a TTL below this threshold is set, the background service will not run and a warning will be shown to the user.
+- Each background execution stores a status payload (`background-last-run`) so the UI can surface stale/failing runs and prompt for corrective action (for example disabling battery optimizations on Android).
+- If a run fails or the OS reports restrictions while the app is backgrounded on Android, the HomeScreen exposes a guided CTA that opens the system battery optimization settings via `expo-intent-launcher`.
 
 ## 7. Testing & Migration Considerations
 
