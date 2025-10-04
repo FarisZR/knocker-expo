@@ -1,13 +1,16 @@
 import { getItem } from './storage';
 
+export const ANDROID_SCHEDULER_MIN_INTERVAL = 15 * 60; // 900 seconds
+
 export interface KnockOptions {
   ip_address?: string;
- ttl?: number;
+  ttl?: number;
 }
 
 interface NormalizedKnockOptions extends KnockOptions {
   effectiveTtl?: number;
   isAndroidSchedulerCompatible: boolean;
+  androidSchedulerMinimum: number;
 }
 
 /**
@@ -21,7 +24,6 @@ export function normalizeTtlForAndroidScheduler(ttl: number | undefined): { orig
     return { originalTtl: undefined, effectiveTtl: undefined, isAndroidSchedulerCompatible: true };
   }
 
-  const ANDROID_SCHEDULER_MIN_INTERVAL = 15 * 60; // 900 seconds
   const isCompatible = ttl >= ANDROID_SCHEDULER_MIN_INTERVAL;
   
   return {
@@ -45,6 +47,7 @@ export async function getKnockOptions(): Promise<NormalizedKnockOptions> {
     ttl: ttlObj.originalTtl,
     effectiveTtl: ttlObj.effectiveTtl,
     isAndroidSchedulerCompatible: ttlObj.isAndroidSchedulerCompatible,
+    androidSchedulerMinimum: ANDROID_SCHEDULER_MIN_INTERVAL,
     ip_address: ip || undefined,
   };
 }

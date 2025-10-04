@@ -1,8 +1,10 @@
+import { AppState, Platform } from 'react-native';
 import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as SecureStore from 'expo-secure-store';
 import { knock } from './knocker';
 import { normalizeTtlForAndroidScheduler } from './knockOptions';
+import { sendBackgroundSuccessNotification } from './notifications';
 
 /**
  * Name of the background fetch task.
@@ -10,9 +12,84 @@ import { normalizeTtlForAndroidScheduler } from './knockOptions';
 export const BACKGROUND_FETCH_TASK = 'background-knocker-task';
 
 /**
+ * Storage key for the last recorded background run metadata.
+ */
+export const BACKGROUND_LAST_RUN_KEY = 'background-last-run';
+
+/**
+ * Storage key that tracks whether silent notifications are allowed.
+ */
+export const BACKGROUND_NOTIFICATIONS_ENABLED_KEY = 'background-notifications-enabled';
+
+/**
  * Android scheduler minimum interval in seconds (15 minutes).
  */
 export const ANDROID_SCHEDULER_MIN_INTERVAL = 15 * 60; // 900 seconds
+
+/**
+ * Threshold (in milliseconds) after which the background task is considered stale.
+ * Currently set to 45 minutes.
+ */
+export const BACKGROUND_STALE_THRESHOLD_MS = 45 * 60 * 1000;
+
+type BackgroundRunStatus =
+  | 'success'
+  | 'no-data'
+  | 'failed'
+  | 'restricted'
+  | 'missing-credentials';
+
+export interface BackgroundRunMetadata {
+  timestamp: string;
+  status: BackgroundRunStatus;
+  detail?: string;
+  expiresInSeconds?: number;
+}
+
+function isBooleanFalse(value: string | null): boolean {
+  return value === 'false';
+}
+
+async function recordBackgroundRun(metadata: BackgroundRunMetadata) {
+  try {
+    await SecureStore.setItemAsync(BACKGROUND_LAST_RUN_KEY, JSON.stringify(metadata));
+  } catch {
+    // Ignore persistence errors to avoid crashing the task.
+  }
+}
+
+export async function getLastBackgroundRunMetadata(): Promise<BackgroundRunMetadata | null> {
+  try {
+    const raw = await SecureStore.getItemAsync(BACKGROUND_LAST_RUN_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    return parsed as BackgroundRunMetadata;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearBackgroundRunMetadata(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(BACKGROUND_LAST_RUN_KEY);
+  } catch {
+    // Best effort.
+  }
+}
+
+export async function getBackgroundNotificationsEnabled(): Promise<boolean> {
+  const pref = await SecureStore.getItemAsync(BACKGROUND_NOTIFICATIONS_ENABLED_KEY);
+  return !isBooleanFalse(pref);
+}
+
+export async function setBackgroundNotificationsEnabled(enabled: boolean): Promise<void> {
+  await SecureStore.setItemAsync(BACKGROUND_NOTIFICATIONS_ENABLED_KEY, enabled ? 'true' : 'false');
+}
 
 /**
  * Validates if TTL is compatible with Android scheduler requirements.
@@ -36,43 +113,85 @@ export function getTtlWarningMessage(ttl: number): string {
   return '';
 }
 
-
 /**
  * Task executor invoked by TaskManager when the background fetch fires.
  */
 export const taskExecutor = async () => {
   try {
+    if (typeof BackgroundFetch.getStatusAsync === 'function') {
+      const status = await BackgroundFetch.getStatusAsync();
+      if (
+        status === BackgroundFetch.BackgroundFetchStatus.Restricted ||
+        status === BackgroundFetch.BackgroundFetchStatus.Denied
+      ) {
+        await recordBackgroundRun({
+          timestamp: new Date().toISOString(),
+          status: 'restricted',
+        });
+        return BackgroundFetch.BackgroundFetchResult.NoData;
+      }
+    }
+
     const endpoint = await SecureStore.getItemAsync('knocker-endpoint');
     const token = await SecureStore.getItemAsync('knocker-token');
     const ttlRaw = await SecureStore.getItemAsync('knocker-ttl');
     const ip = await SecureStore.getItemAsync('knocker-ip');
+    const notificationsEnabled = await getBackgroundNotificationsEnabled();
 
-    if (endpoint && token) {
-      const ttlNum = ttlRaw ? Number(ttlRaw) : undefined;
-      const ttlObj = normalizeTtlForAndroidScheduler(ttlNum);
-      
-      // Only proceed with knock if TTL is compatible with Android scheduler
-      if (ttlObj.isAndroidSchedulerCompatible) {
-        const hasOptions = (typeof ttlObj.effectiveTtl === 'number' && !isNaN(ttlObj.effectiveTtl)) || !!ip;
-        if (hasOptions) {
-          await knock(endpoint, token, {
-            ttl: ttlObj.effectiveTtl,
-            ip_address: ip || undefined,
-          });
-        } else {
-          await knock(endpoint, token);
-        }
-        return BackgroundFetch.BackgroundFetchResult.NewData;
-      } else {
-        // If TTL is not compatible, return NoData to indicate no action was taken
-        // However, we should still allow the background service to continue running
-        // so that if the user updates the TTL later, it will work
-        return BackgroundFetch.BackgroundFetchResult.NoData;
-      }
-    } else {
+    if (!endpoint || !token) {
+      await recordBackgroundRun({
+        timestamp: new Date().toISOString(),
+        status: 'missing-credentials',
+      });
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
-  } catch {
+
+    const ttlNum = ttlRaw ? Number(ttlRaw) : undefined;
+    const ttlObj = normalizeTtlForAndroidScheduler(ttlNum);
+
+    const options: { ttl?: number; ip_address?: string } = {};
+    if (typeof ttlObj.effectiveTtl === 'number' && !Number.isNaN(ttlObj.effectiveTtl)) {
+      options.ttl = ttlObj.effectiveTtl;
+    }
+    if (ip) {
+      options.ip_address = ip;
+    }
+
+    try {
+      const result = Object.keys(options).length
+        ? await knock(endpoint, token, options)
+        : await knock(endpoint, token);
+
+      await recordBackgroundRun({
+        timestamp: new Date().toISOString(),
+        status: 'success',
+        expiresInSeconds: result?.expires_in_seconds,
+      });
+
+      const appState = AppState.currentState;
+      if (notificationsEnabled && appState !== 'active') {
+        await sendBackgroundSuccessNotification({
+          endpoint,
+          whitelistedEntry: result?.whitelisted_entry ?? 'Unknown',
+          expiresInSeconds: result?.expires_in_seconds,
+        });
+      }
+
+      return BackgroundFetch.BackgroundFetchResult.NewData;
+    } catch (error: any) {
+      await recordBackgroundRun({
+        timestamp: new Date().toISOString(),
+        status: 'failed',
+        detail: error?.message ?? String(error),
+      });
+      return BackgroundFetch.BackgroundFetchResult.Failed;
+    }
+  } catch (error: any) {
+    await recordBackgroundRun({
+      timestamp: new Date().toISOString(),
+      status: 'failed',
+      detail: error?.message ?? String(error),
+    });
     return BackgroundFetch.BackgroundFetchResult.Failed;
   }
 };
@@ -86,21 +205,29 @@ export function defineTask() {
 
 /**
  * Registers the background task if the TaskManager API is available (native platforms / dev build).
- * On web the API is unavailable, so this becomes a no-op to prevent UnavailabilityError:
- * "TaskManager.isTaskRegisteredAsync is not available on web".
+ * On web the API is unavailable, so this becomes a no-op to prevent UnavailabilityError.
  */
 export async function registerBackgroundTask() {
+  if (Platform.OS === 'web') {
+    return;
+  }
+
   try {
-    // Define the task (safe to call repeatedly).
+    if (!(await safeIsTaskManagerAvailable())) {
+      return;
+    }
+
     defineTask();
-    // Attempt to register with BackgroundFetch. In tests/mocked environments this will call the mocked function.
+    if (typeof BackgroundFetch.setMinimumIntervalAsync === 'function') {
+      await BackgroundFetch.setMinimumIntervalAsync(ANDROID_SCHEDULER_MIN_INTERVAL);
+    }
+
     await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-      minimumInterval: 60 * 15, // 15 minutes
+      minimumInterval: ANDROID_SCHEDULER_MIN_INTERVAL,
       stopOnTerminate: false,
       startOnBoot: true,
     });
   } catch (e) {
-    // Swallow errors caused by unsupported environments or permission issues.
     console.warn('Background task registration skipped:', (e as Error).message);
   }
 }
@@ -110,7 +237,6 @@ export async function registerBackgroundTask() {
  */
 export async function unregisterBackgroundTask() {
   try {
-    // If the TaskManager mock provides isTaskRegisteredAsync use it; otherwise skip.
     if (typeof TaskManager.isTaskRegisteredAsync === 'function') {
       const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
       if (isRegistered) {
@@ -118,22 +244,48 @@ export async function unregisterBackgroundTask() {
       }
     }
   } catch (e) {
-    // Ignore unavailability or other transient errors.
     console.warn('Background task unregistration skipped:', (e as Error).message);
+  }
+}
+
+/**
+ * Ensures the background task is registered (best-effort on supported platforms).
+ */
+export async function ensureBackgroundTaskRegistered() {
+  if (Platform.OS === 'web') {
+    return;
+  }
+
+  try {
+    if (!(await safeIsTaskManagerAvailable())) {
+      return;
+    }
+
+    if (typeof TaskManager.isTaskRegisteredAsync === 'function') {
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
+      if (isRegistered) {
+        return;
+      }
+    }
+
+    await registerBackgroundTask();
+  } catch (e) {
+    console.warn('Background task ensure registration skipped:', (e as Error).message);
   }
 }
 
 /**
  * Helper that safely checks TaskManager availability without throwing on web.
  */
-async function safeIsTaskManagerAvailable(): Promise<boolean> {
+export async function safeIsTaskManagerAvailable(): Promise<boolean> {
   try {
-    // Some test mocks don't include isAvailableAsync but do provide defineTask/isTaskRegisteredAsync.
-    // If the real isAvailableAsync exists, use it. Otherwise infer availability from presence of other TaskManager APIs.
     if (typeof TaskManager.isAvailableAsync === 'function') {
       return await TaskManager.isAvailableAsync();
     }
-    return typeof TaskManager.defineTask === 'function' && typeof TaskManager.isTaskRegisteredAsync === 'function';
+    return (
+      typeof TaskManager.defineTask === 'function' &&
+      typeof TaskManager.isTaskRegisteredAsync === 'function'
+    );
   } catch {
     return false;
   }

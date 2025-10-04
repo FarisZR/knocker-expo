@@ -3,22 +3,75 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import MainScreen from './MainScreen';
 import * as SecureStore from 'expo-secure-store';
 import * as Knocker from '../services/knocker';
+import {
+  initializeNotificationService,
+  hasNotificationPermissions,
+  requestNotificationPermissions,
+} from '../services/notifications';
+import * as BackgroundKnocker from '../services/backgroundKnocker';
 
-jest.mock('expo-secure-store');
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(),
+  setItemAsync: jest.fn(),
+  deleteItemAsync: jest.fn(),
+}));
+
 jest.mock('../services/knocker');
+
+jest.mock('../services/notifications', () => ({
+  initializeNotificationService: jest.fn().mockResolvedValue(undefined),
+  hasNotificationPermissions: jest.fn().mockResolvedValue(false),
+  requestNotificationPermissions: jest.fn().mockResolvedValue(true),
+}));
+
+jest.mock('../services/backgroundKnocker', () => {
+  const actual = jest.requireActual('../services/backgroundKnocker');
+  return {
+    ...actual,
+    registerBackgroundTask: jest.fn().mockResolvedValue(undefined),
+    unregisterBackgroundTask: jest.fn().mockResolvedValue(undefined),
+    ensureBackgroundTaskRegistered: jest.fn().mockResolvedValue(undefined),
+    getLastBackgroundRunMetadata: jest.fn().mockResolvedValue(null),
+    getBackgroundNotificationsEnabled: jest.fn().mockResolvedValue(true),
+    setBackgroundNotificationsEnabled: jest.fn().mockResolvedValue(undefined),
+    clearBackgroundRunMetadata: jest.fn().mockResolvedValue(undefined),
+  };
+});
 
 const mockKnock = Knocker.knock as jest.Mock;
 const mockGetItemAsync = SecureStore.getItemAsync as jest.Mock;
+const mockRequestNotificationPermissions = requestNotificationPermissions as jest.Mock;
+const mockHasNotificationPermissions = hasNotificationPermissions as jest.Mock;
+const mockInitializeNotificationService = initializeNotificationService as jest.Mock;
+
+const mockEnsureBackgroundTaskRegistered = BackgroundKnocker.ensureBackgroundTaskRegistered as jest.Mock;
+const mockGetLastBackgroundRunMetadata = BackgroundKnocker.getLastBackgroundRunMetadata as jest.Mock;
+const mockGetBackgroundNotificationsEnabled = BackgroundKnocker.getBackgroundNotificationsEnabled as jest.Mock;
 
 describe('MainScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+
+    mockGetItemAsync.mockReset();
+    mockGetItemAsync.mockResolvedValue(null);
+
+    mockKnock.mockReset();
+    mockRequestNotificationPermissions.mockReset();
+    mockHasNotificationPermissions.mockReset().mockResolvedValue(false);
+    mockInitializeNotificationService.mockReset().mockResolvedValue(undefined);
+
+    mockEnsureBackgroundTaskRegistered.mockReset().mockResolvedValue(undefined);
+    mockGetLastBackgroundRunMetadata.mockReset().mockResolvedValue(null);
+    mockGetBackgroundNotificationsEnabled.mockReset().mockResolvedValue(true);
   });
 
+  const primeCredentials = (endpoint: string, token: string) => {
+    mockGetItemAsync.mockImplementationOnce(() => Promise.resolve(endpoint));
+    mockGetItemAsync.mockImplementationOnce(() => Promise.resolve(token));
+  };
+
   it('should automatically knock and display whitelist status on successful load', async () => {
-    mockGetItemAsync
-      .mockResolvedValueOnce('http://localhost:8080')
-      .mockResolvedValueOnce('test-token');
+    primeCredentials('http://localhost:8080', 'test-token');
     mockKnock.mockResolvedValue({
       whitelisted_entry: '127.0.0.1',
       expires_in_seconds: 3600,
@@ -26,26 +79,23 @@ describe('MainScreen', () => {
 
     render(<MainScreen />);
 
-    // Wait for the automatic knock to complete
     await waitFor(() => {
-      expect(screen.getByText(/Whitelisted: 127.0.0.1/)).toBeTruthy();
+      expect(screen.getByText(/Whitelisted: 127\.0\.0\.1/)).toBeTruthy();
       expect(screen.getByText(/Expires in: 3600 seconds/)).toBeTruthy();
     });
 
-    // Verify that knock was called automatically (options object may be passed)
     expect(mockKnock).toHaveBeenCalledWith('http://localhost:8080', 'test-token', expect.any(Object));
     expect(mockKnock).toHaveBeenCalledTimes(1);
+    expect(mockInitializeNotificationService).toHaveBeenCalledTimes(1);
+    expect(mockRequestNotificationPermissions).not.toHaveBeenCalled();
   });
 
   it('should display an error message if automatic knock fails', async () => {
-    mockGetItemAsync
-      .mockResolvedValueOnce('http://localhost:8080')
-      .mockResolvedValueOnce('test-token');
+    primeCredentials('http://localhost:8080', 'test-token');
     mockKnock.mockRejectedValue(new Error('Auto-Knock Failed'));
 
     render(<MainScreen />);
 
-    // Wait for the error message
     await waitFor(() => {
       expect(screen.getByText('Error: Auto-Knock Failed')).toBeTruthy();
     });
@@ -53,8 +103,6 @@ describe('MainScreen', () => {
   });
 
   it('should display a message if credentials are not set', async () => {
-    mockGetItemAsync.mockResolvedValue(null);
-
     render(<MainScreen />);
 
     await waitFor(() => {
@@ -64,10 +112,8 @@ describe('MainScreen', () => {
   });
 
   it('should perform a manual knock successfully when the button is pressed', async () => {
-    mockGetItemAsync
-      .mockResolvedValueOnce('http://localhost:8080')
-      .mockResolvedValueOnce('test-token');
-    // Mock the initial automatic knock
+    primeCredentials('http://localhost:8080', 'test-token');
+
     mockKnock.mockResolvedValueOnce({
       whitelisted_entry: '1.1.1.1',
       expires_in_seconds: 10,
@@ -75,26 +121,22 @@ describe('MainScreen', () => {
 
     render(<MainScreen />);
 
-    // Wait for the initial knock to finish
-    await waitFor(() => expect(screen.getByText(/Whitelisted: 1.1.1.1/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Whitelisted: 1\.1\.1\.1/)).toBeTruthy());
     expect(mockKnock).toHaveBeenCalledTimes(1);
 
-    // Setup mock for the manual knock
     mockKnock.mockResolvedValueOnce({
       whitelisted_entry: '8.8.8.8',
       expires_in_seconds: 7200,
     });
 
-    // Press the visible "Knock Again" button by text (more reliable across StyledButton implementations)
     const knockButton = screen.getByText(/Knock Again/);
     fireEvent.press(knockButton);
-    
-    // Loading state may be transient. Wait for the knock mock to be invoked again (manual knock).
+
     await waitFor(() => {
       expect(mockKnock).toHaveBeenCalledTimes(2);
     });
 
-    expect(mockKnock).toHaveBeenCalledTimes(2);
     expect(mockKnock).toHaveBeenLastCalledWith('http://localhost:8080', 'test-token', expect.any(Object));
+    expect(mockRequestNotificationPermissions).toHaveBeenCalledTimes(1);
   });
 });
