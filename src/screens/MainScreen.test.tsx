@@ -36,6 +36,7 @@ jest.mock('../services/backgroundKnocker', () => {
     unregisterBackgroundTask: jest.fn().mockResolvedValue(undefined),
     ensureBackgroundTaskRegistered: jest.fn().mockResolvedValue(undefined),
     getLastBackgroundRunMetadata: jest.fn().mockResolvedValue(null),
+    getNextRunMetadata: jest.fn().mockResolvedValue(null),
     getBackgroundNotificationsEnabled: jest.fn().mockResolvedValue(true),
     setBackgroundNotificationsEnabled: jest.fn().mockResolvedValue(undefined),
     clearBackgroundRunMetadata: jest.fn().mockResolvedValue(undefined),
@@ -152,6 +153,59 @@ describe('MainScreen', () => {
 
     expect(mockKnock).toHaveBeenLastCalledWith('http://localhost:8080', 'test-token', expect.any(Object));
     expect(mockRequestNotificationPermissions).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows and performs catch-up when nextRunAt is past', async () => {
+    // Provide stored values including background-service-enabled so UI shows catch-up control.
+    mockGetItemAsync.mockImplementation((key: string) => {
+      switch (key) {
+        case 'knocker-endpoint':
+          return Promise.resolve('http://localhost:8080');
+        case 'knocker-token':
+          return Promise.resolve('test-token');
+        case 'knocker-ttl':
+          return Promise.resolve(null);
+        case 'knocker-ip':
+          return Promise.resolve(null);
+        case 'background-service-enabled':
+          return Promise.resolve('true');
+        case 'settings-open':
+          return Promise.resolve('true');
+        default:
+          return Promise.resolve(null);
+      }
+    });
+
+    // initial auto-knock
+    mockKnock.mockResolvedValueOnce({
+      whitelisted_entry: '2.2.2.2',
+      expires_in_seconds: 60,
+    });
+
+    // mock next-run metadata to be in the past so catch-up is due
+    const pastMeta = { nextRunAt: Date.now() - 5000, requestedTtl: 900, effectiveTtl: 900, scheduledIntervalSeconds: 900 };
+    // Ensure getNextRunMetadata consistently returns the past meta during the test.
+    (BackgroundKnocker.getNextRunMetadata as jest.Mock).mockResolvedValue(pastMeta);
+
+    render(<MainScreen />);
+
+    // wait for auto-knock to complete
+    await waitFor(() => expect(screen.getByText(/Whitelisted: 2\.2\.2\.2/)).toBeTruthy());
+
+    // prepare knock response for catch-up
+    mockKnock.mockResolvedValueOnce({
+      whitelisted_entry: '3.3.3.3',
+      expires_in_seconds: 3600,
+    });
+
+    // the catch-up button should be visible
+    const catchupButton = await screen.findByText(/Run catch-up/);
+    fireEvent.press(catchupButton);
+
+    await waitFor(() => {
+      // knock should have been called for the catch-up
+      expect(mockKnock).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('surfaces Android battery optimization guidance when the last background knock failed', async () => {

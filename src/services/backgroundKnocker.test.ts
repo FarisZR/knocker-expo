@@ -150,9 +150,9 @@ describe('backgroundKnocker', () => {
 
       expect(result).toBe(BackgroundFetch.BackgroundFetchResult.NewData);
       expect(mockKnock).toHaveBeenCalledWith('http://localhost:8080', 'test-token', { ttl: 900 });
-      const metadataCall = mockSetItemAsync.mock.calls.find(([key]) => key === BACKGROUND_LAST_RUN_KEY);
-      expect(metadataCall).toBeTruthy();
-      const metadata = JSON.parse(metadataCall![1]);
+      const callsForKey = mockSetItemAsync.mock.calls.filter(([key]) => key === BACKGROUND_LAST_RUN_KEY);
+      expect(callsForKey.length).toBeGreaterThan(0);
+      const metadata = JSON.parse(callsForKey[callsForKey.length - 1][1]);
       expect(metadata.status).toBe('success');
       expect(metadata.expiresInSeconds).toBe(3600);
       expect(mockSendBackgroundSuccessNotification).toHaveBeenCalledWith({
@@ -189,9 +189,9 @@ describe('backgroundKnocker', () => {
 
       expect(result).toBe(BackgroundFetch.BackgroundFetchResult.NoData);
       expect(mockKnock).not.toHaveBeenCalled();
-      const metadataCall = mockSetItemAsync.mock.calls.find(([key]) => key === BACKGROUND_LAST_RUN_KEY);
-      expect(metadataCall).toBeTruthy();
-      const metadata = JSON.parse(metadataCall![1]);
+      const callsForKey = mockSetItemAsync.mock.calls.filter(([key]) => key === BACKGROUND_LAST_RUN_KEY);
+      expect(callsForKey.length).toBeGreaterThan(0);
+      const metadata = JSON.parse(callsForKey[callsForKey.length - 1][1]);
       expect(metadata.status).toBe('restricted');
     });
 
@@ -202,9 +202,9 @@ describe('backgroundKnocker', () => {
 
       expect(result).toBe(BackgroundFetch.BackgroundFetchResult.NoData);
       expect(mockKnock).not.toHaveBeenCalled();
-      const metadataCall = mockSetItemAsync.mock.calls.find(([key]) => key === BACKGROUND_LAST_RUN_KEY);
-      expect(metadataCall).toBeTruthy();
-      const metadata = JSON.parse(metadataCall![1]);
+      const callsForKey = mockSetItemAsync.mock.calls.filter(([key]) => key === BACKGROUND_LAST_RUN_KEY);
+      expect(callsForKey.length).toBeGreaterThan(0);
+      const metadata = JSON.parse(callsForKey[callsForKey.length - 1][1]);
       expect(metadata.status).toBe('missing-credentials');
     });
 
@@ -226,9 +226,9 @@ describe('backgroundKnocker', () => {
       const result = await taskExecutor();
 
       expect(result).toBe(BackgroundFetch.BackgroundFetchResult.Failed);
-      const metadataCall = mockSetItemAsync.mock.calls.find(([key]) => key === BACKGROUND_LAST_RUN_KEY);
-      expect(metadataCall).toBeTruthy();
-      const metadata = JSON.parse(metadataCall![1]);
+      const callsForKey = mockSetItemAsync.mock.calls.filter(([key]) => key === BACKGROUND_LAST_RUN_KEY);
+      expect(callsForKey.length).toBeGreaterThan(0);
+      const metadata = JSON.parse(callsForKey[callsForKey.length - 1][1]);
       expect(metadata.status).toBe('failed');
     });
   });

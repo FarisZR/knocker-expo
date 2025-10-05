@@ -28,6 +28,8 @@ import {
   ensureBackgroundTaskRegistered,
   getBackgroundNotificationsEnabled,
   getLastBackgroundRunMetadata,
+  getNextRunMetadata,
+  NextRunMetadata,
   registerBackgroundTask,
   setBackgroundNotificationsEnabled,
   unregisterBackgroundTask
@@ -60,6 +62,7 @@ export default function HomeScreen() {
   const [warningMessage, setWarningMessage] = useState('');
   const [backgroundStatusMessage, setBackgroundStatusMessage] = useState('');
   const [backgroundMetadata, setBackgroundMetadata] = useState<BackgroundRunMetadata | null>(null);
+  const [nextRunMeta, setNextRunMeta] = useState<NextRunMetadata | null>(null);
   const [backgroundBatteryHint, setBackgroundBatteryHint] = useState('');
   const [showBatteryOptimizationPrompt, setShowBatteryOptimizationPrompt] = useState(false);
 
@@ -107,6 +110,13 @@ export default function HomeScreen() {
       setBackgroundBatteryHint('');
       setShowBatteryOptimizationPrompt(false);
 
+      // Also restore next-run metadata used for catch-up decisions.
+      try {
+        const nextMeta = await getNextRunMetadata();
+        setNextRunMeta(nextMeta);
+      } catch {
+        setNextRunMeta(null);
+      }
       if (!metadata) {
         setBackgroundStatusMessage('Background knock has not run yet.');
         return;
@@ -326,6 +336,21 @@ export default function HomeScreen() {
     }
   };
 
+  const onManualCatchup = async () => {
+    // Manual catch-up should only attempt when credentials exist.
+    if (!endpoint || !token) return;
+    // Only perform catch-up if the stored nextRunAt is in the past or missing.
+    const meta = await getNextRunMetadata();
+    if (meta && typeof meta.nextRunAt === 'number' && Date.now() < meta.nextRunAt) {
+      // Not yet due; no-op to avoid unnecessary network.
+      return;
+    }
+    const options = await getKnockOptions();
+    await handleKnock(endpoint, token, options, true);
+    // Refresh status after manual catch-up
+    await refreshBackgroundStatus(isBackgroundServiceEnabled);
+  };
+
   const toggleSettings = async (open?: boolean) => {
     const next = typeof open === 'boolean' ? open : !settingsOpen;
     // Smooth native layout change
@@ -465,6 +490,15 @@ export default function HomeScreen() {
                 <StyledButton
                   title="Open battery optimization settings"
                   onPress={handleOpenBatterySettings}
+                  variant="outlined"
+                  style={styles.batteryButton}
+                />
+              ) : null}
+
+              {isBackgroundServiceEnabled && nextRunMeta && typeof nextRunMeta.nextRunAt === 'number' && (Date.now() >= nextRunMeta.nextRunAt || settingsOpen) ? (
+                <StyledButton
+                  title="Run catch-up"
+                  onPress={onManualCatchup}
                   variant="outlined"
                   style={styles.batteryButton}
                 />

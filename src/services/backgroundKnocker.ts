@@ -2,9 +2,7 @@ import * as BackgroundFetch from 'expo-background-fetch';
 import * as SecureStore from 'expo-secure-store';
 import * as TaskManager from 'expo-task-manager';
 import { AppState, Platform } from 'react-native';
-import { knock } from './knocker';
 import { normalizeTtlForAndroidScheduler } from './knockOptions';
-import { sendBackgroundSuccessNotification } from './notifications';
 
 /**
  * Name of the background fetch task.
@@ -102,6 +100,22 @@ function isBooleanFalse(value: string | null): boolean {
   return value === 'false';
 }
 
+/**
+ * Record a lightweight "start" marker as early as possible to detect interrupted runs.
+ * This helps distinguish "task didn't run" from "task started but was killed".
+ */
+async function recordBackgroundRunStart() {
+  try {
+    const marker = { timestamp: new Date().toISOString(), status: 'started' as const };
+    await SecureStore.setItemAsync(BACKGROUND_LAST_RUN_KEY, JSON.stringify(marker));
+  } catch {
+    // Best-effort; swallow to avoid throwing inside headless task.
+  }
+}
+
+/**
+ * Record final background run metadata (success/failure/restricted/etc).
+ */
 async function recordBackgroundRun(metadata: BackgroundRunMetadata) {
   try {
     await SecureStore.setItemAsync(BACKGROUND_LAST_RUN_KEY, JSON.stringify(metadata));
@@ -184,11 +198,22 @@ export const taskExecutor = async () => {
       }
     }
 
-    const endpoint = await SecureStore.getItemAsync('knocker-endpoint');
-    const token = await SecureStore.getItemAsync('knocker-token');
-    const ttlRaw = await SecureStore.getItemAsync('knocker-ttl');
-    const ip = await SecureStore.getItemAsync('knocker-ip');
-    const notificationsEnabled = await getBackgroundNotificationsEnabled();
+    // Batch SecureStore reads to reduce native bridge overhead.
+    const [
+      endpoint,
+      token,
+      ttlRaw,
+      ip,
+      notificationsPref,
+    ] = await Promise.all([
+      SecureStore.getItemAsync('knocker-endpoint'),
+      SecureStore.getItemAsync('knocker-token'),
+      SecureStore.getItemAsync('knocker-ttl'),
+      SecureStore.getItemAsync('knocker-ip'),
+      SecureStore.getItemAsync(BACKGROUND_NOTIFICATIONS_ENABLED_KEY),
+    ]);
+
+    const notificationsEnabled = !isBooleanFalse(notificationsPref);
 
     if (!endpoint || !token) {
       await recordBackgroundRun({
@@ -200,7 +225,7 @@ export const taskExecutor = async () => {
 
     const ttlNum = ttlRaw ? Number(ttlRaw) : undefined;
     const ttlObj = normalizeTtlForAndroidScheduler(ttlNum);
- 
+
     const options: { ttl?: number; ip_address?: string } = {};
     if (typeof ttlObj.effectiveTtl === 'number' && !Number.isNaN(ttlObj.effectiveTtl)) {
       options.ttl = ttlObj.effectiveTtl;
@@ -208,18 +233,27 @@ export const taskExecutor = async () => {
     if (ip) {
       options.ip_address = ip;
     }
- 
+
+    // Persist a quick start marker so we can detect interrupted runs.
+    await recordBackgroundRunStart();
+
     try {
+      // Lazy-load the network module to reduce memory footprint at task start.
+      // Use require() so Jest module mocks resolve correctly in tests.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+      const { knock } = require('./knocker');
+
       const result = Object.keys(options).length
         ? await knock(endpoint, token, options)
         : await knock(endpoint, token);
- 
+
+      // Record final success metadata (includes timestamp).
       await recordBackgroundRun({
         timestamp: new Date().toISOString(),
         status: 'success',
         expiresInSeconds: result?.expires_in_seconds,
       });
- 
+
       // --- Scheduling logic: persist next-run metadata and attempt to adjust scheduler ---
       let requestedTtl: number | undefined;
 
@@ -237,7 +271,7 @@ export const taskExecutor = async () => {
       const effectiveTtl = typeof options.ttl === 'number' ? options.ttl : undefined;
       const ttlBelowMinimum =
         typeof requestedTtl === 'number' && requestedTtl < ANDROID_SCHEDULER_MIN_INTERVAL;
- 
+
       // Calculate scheduled interval (seconds). Try to schedule slightly before expiry,
       // but never below Android's minimum.
       let scheduledInterval = ANDROID_SCHEDULER_MIN_INTERVAL;
@@ -245,7 +279,7 @@ export const taskExecutor = async () => {
         const candidate = Math.max(requestedTtl - TTL_SAFETY_BUFFER_SECONDS, ANDROID_SCHEDULER_MIN_INTERVAL);
         scheduledInterval = candidate;
       }
- 
+
       const nextRunAt = Date.now() + scheduledInterval * 1000;
       await setNextRunMetadata({
         nextRunAt,
@@ -254,7 +288,7 @@ export const taskExecutor = async () => {
         scheduledIntervalSeconds: scheduledInterval,
         ttlBelowMinimum,
       });
- 
+
       // Best-effort: inform system scheduler about preferred minimum interval (Android).
       if (typeof BackgroundFetch.setMinimumIntervalAsync === 'function') {
         try {
@@ -264,18 +298,27 @@ export const taskExecutor = async () => {
         }
       }
       // --- end scheduling logic ---
- 
+
       const appState = AppState.currentState;
       if (notificationsEnabled && appState !== 'active') {
-        await sendBackgroundSuccessNotification({
-          endpoint,
-          whitelistedEntry: result?.whitelisted_entry ?? 'Unknown',
-          expiresInSeconds: result?.expires_in_seconds,
-        });
+        try {
+          // Lazy-load notifications to avoid bringing heavy modules into memory unnecessarily.
+          // Require synchronously so Jest mocks work in tests.
+          // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+          const { sendBackgroundSuccessNotification } = require('./notifications');
+          await sendBackgroundSuccessNotification({
+            endpoint,
+            whitelistedEntry: result?.whitelisted_entry ?? 'Unknown',
+            expiresInSeconds: result?.expires_in_seconds,
+          });
+        } catch {
+          // Non-fatal; keep task short.
+        }
       }
- 
+
       return BackgroundFetch.BackgroundFetchResult.NewData;
     } catch (error: any) {
+      // Ensure we persist failure metadata if network call or processing fails.
       await recordBackgroundRun({
         timestamp: new Date().toISOString(),
         status: 'failed',
