@@ -17,6 +17,11 @@ export const BACKGROUND_FETCH_TASK = 'background-knocker-task';
 export const BACKGROUND_LAST_RUN_KEY = 'background-last-run';
 
 /**
+ * Storage key for persisted next-run scheduling metadata.
+ */
+export const BACKGROUND_NEXT_RUN_KEY = 'background-next-run';
+
+/**
  * Storage key that tracks whether silent notifications are allowed.
  */
 export const BACKGROUND_NOTIFICATIONS_ENABLED_KEY = 'background-notifications-enabled';
@@ -31,6 +36,48 @@ export const ANDROID_SCHEDULER_MIN_INTERVAL = 15 * 60; // 900 seconds
  * Currently set to 45 minutes.
  */
 export const BACKGROUND_STALE_THRESHOLD_MS = 45 * 60 * 1000;
+
+/**
+ * Amount of seconds to subtract from the server TTL to create a safety buffer.
+ * This helps re-knock slightly before the whitelist actually expires.
+ */
+export const TTL_SAFETY_BUFFER_SECONDS = 120;
+
+export interface NextRunMetadata {
+  nextRunAt: number; // epoch ms
+  requestedTtl?: number;
+  effectiveTtl?: number;
+  scheduledIntervalSeconds: number; // interval written to the scheduler
+  ttlBelowMinimum?: boolean;
+}
+
+export async function getNextRunMetadata(): Promise<NextRunMetadata | null> {
+  try {
+    const raw = await SecureStore.getItemAsync(BACKGROUND_NEXT_RUN_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed as NextRunMetadata;
+  } catch {
+    return null;
+  }
+}
+
+export async function setNextRunMetadata(meta: NextRunMetadata): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(BACKGROUND_NEXT_RUN_KEY, JSON.stringify(meta));
+  } catch {
+    // Best effort.
+  }
+}
+
+export async function clearNextRunMetadata(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(BACKGROUND_NEXT_RUN_KEY);
+  } catch {
+    // Best effort.
+  }
+}
 
 type BackgroundRunStatus =
   | 'success'
@@ -148,7 +195,7 @@ export const taskExecutor = async () => {
 
     const ttlNum = ttlRaw ? Number(ttlRaw) : undefined;
     const ttlObj = normalizeTtlForAndroidScheduler(ttlNum);
-
+ 
     const options: { ttl?: number; ip_address?: string } = {};
     if (typeof ttlObj.effectiveTtl === 'number' && !Number.isNaN(ttlObj.effectiveTtl)) {
       options.ttl = ttlObj.effectiveTtl;
@@ -156,18 +203,54 @@ export const taskExecutor = async () => {
     if (ip) {
       options.ip_address = ip;
     }
-
+ 
     try {
       const result = Object.keys(options).length
         ? await knock(endpoint, token, options)
         : await knock(endpoint, token);
-
+ 
       await recordBackgroundRun({
         timestamp: new Date().toISOString(),
         status: 'success',
         expiresInSeconds: result?.expires_in_seconds,
       });
-
+ 
+      // --- Scheduling logic: persist next-run metadata and attempt to adjust scheduler ---
+      const requestedTtl =
+        (result && (result as any).requested_ttl !== undefined
+          ? (result as any).requested_ttl
+          : ttlNum) ?? undefined;
+      const effectiveTtl = typeof options.ttl === 'number' ? options.ttl : undefined;
+      const ttlBelowMinimum =
+        typeof requestedTtl === 'number' && requestedTtl < ANDROID_SCHEDULER_MIN_INTERVAL;
+ 
+      // Calculate scheduled interval (seconds). Try to schedule slightly before expiry,
+      // but never below Android's minimum.
+      let scheduledInterval = ANDROID_SCHEDULER_MIN_INTERVAL;
+      if (typeof requestedTtl === 'number' && !Number.isNaN(requestedTtl)) {
+        const candidate = Math.max(requestedTtl - TTL_SAFETY_BUFFER_SECONDS, ANDROID_SCHEDULER_MIN_INTERVAL);
+        scheduledInterval = candidate;
+      }
+ 
+      const nextRunAt = Date.now() + scheduledInterval * 1000;
+      await setNextRunMetadata({
+        nextRunAt,
+        requestedTtl,
+        effectiveTtl,
+        scheduledIntervalSeconds: scheduledInterval,
+        ttlBelowMinimum,
+      });
+ 
+      // Best-effort: inform system scheduler about preferred minimum interval (Android).
+      if (typeof BackgroundFetch.setMinimumIntervalAsync === 'function') {
+        try {
+          await BackgroundFetch.setMinimumIntervalAsync(scheduledInterval);
+        } catch {
+          // Non-fatal
+        }
+      }
+      // --- end scheduling logic ---
+ 
       const appState = AppState.currentState;
       if (notificationsEnabled && appState !== 'active') {
         await sendBackgroundSuccessNotification({
@@ -176,7 +259,7 @@ export const taskExecutor = async () => {
           expiresInSeconds: result?.expires_in_seconds,
         });
       }
-
+ 
       return BackgroundFetch.BackgroundFetchResult.NewData;
     } catch (error: any) {
       await recordBackgroundRun({
@@ -243,6 +326,8 @@ export async function unregisterBackgroundTask() {
         await BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK);
       }
     }
+    // Clear persisted scheduling metadata so we don't attempt to restore after explicit unregister.
+    await clearNextRunMetadata();
   } catch (e) {
     console.warn('Background task unregistration skipped:', (e as Error).message);
   }
@@ -255,20 +340,39 @@ export async function ensureBackgroundTaskRegistered() {
   if (Platform.OS === 'web') {
     return;
   }
-
+ 
   try {
     if (!(await safeIsTaskManagerAvailable())) {
       return;
     }
-
+ 
     if (typeof TaskManager.isTaskRegisteredAsync === 'function') {
       const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_FETCH_TASK);
       if (isRegistered) {
+        // Restore system scheduler preference from metadata if available.
+        const meta = await getNextRunMetadata();
+        if (meta && typeof BackgroundFetch.setMinimumIntervalAsync === 'function') {
+          try {
+            await BackgroundFetch.setMinimumIntervalAsync(meta.scheduledIntervalSeconds || ANDROID_SCHEDULER_MIN_INTERVAL);
+          } catch {
+            // ignore
+          }
+        }
         return;
       }
     }
-
+ 
     await registerBackgroundTask();
+ 
+    // After registration, attempt to restore scheduling prefs from stored metadata.
+    const restored = await getNextRunMetadata();
+    if (restored && typeof BackgroundFetch.setMinimumIntervalAsync === 'function') {
+      try {
+        await BackgroundFetch.setMinimumIntervalAsync(restored.scheduledIntervalSeconds || ANDROID_SCHEDULER_MIN_INTERVAL);
+      } catch {
+        // ignore
+      }
+    }
   } catch (e) {
     console.warn('Background task ensure registration skipped:', (e as Error).message);
   }

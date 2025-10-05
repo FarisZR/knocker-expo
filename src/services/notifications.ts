@@ -1,9 +1,13 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-
+import * as SecureStore from 'expo-secure-store';
+ 
 import { t } from './localization';
+import { unregisterBackgroundTask, setBackgroundNotificationsEnabled } from './backgroundKnocker';
 
 const ANDROID_CHANNEL_ID = 'background-knocker-success';
+const BACKGROUND_NOTIFICATION_CATEGORY = 'background-knocker-actions';
+const DISABLE_KNOCKER_ACTION_ID = 'disable-knocker-action';
 
 let handlerConfigured = false;
 
@@ -99,6 +103,56 @@ function isPermissionGranted(status: Notifications.NotificationPermissionsStatus
 
 export async function initializeNotificationService(): Promise<boolean> {
   ensureNotificationHandlerConfigured();
+  // Ensure categories/actions are configured for interactive notifications.
+  try {
+    // Define an action that allows disabling the background knocker from the notification.
+    await Notifications.setNotificationCategoryAsync(BACKGROUND_NOTIFICATION_CATEGORY, [
+      {
+        identifier: DISABLE_KNOCKER_ACTION_ID,
+        buttonTitle: t('background.disable') || 'Disable Knocker',
+        options: {
+          isDestructive: true,
+          opensAppToForeground: false,
+        },
+      },
+    ]);
+  } catch {
+    // Non-fatal; continue.
+  }
+
+  // Register a response listener that handles interactive notification actions.
+  try {
+    Notifications.addNotificationResponseReceivedListener(async (response) => {
+      try {
+        const actionId = response?.actionIdentifier;
+        if (actionId === DISABLE_KNOCKER_ACTION_ID) {
+          // Disable background notifications preference and unregister the background task.
+          try {
+            await setBackgroundNotificationsEnabled(false);
+            // Mirror existing settings key used elsewhere so UI reflects change.
+            await SecureStore.setItemAsync('background-service-enabled', 'false');
+            await unregisterBackgroundTask();
+          } catch (e) {
+            if (typeof notificationErrorReporter === 'function') {
+              try {
+                notificationErrorReporter(e);
+              } catch {
+                // swallow reporter failures
+              }
+            }
+            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+              console.warn('Failed to disable knocker via notification action:', e);
+            }
+          }
+        }
+      } catch {
+        // Swallow to avoid throwing in notification handler.
+      }
+    });
+  } catch {
+    // Listener registration failed — non-fatal.
+  }
+
   return ensureAndroidChannelAsync();
 }
 
