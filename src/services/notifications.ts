@@ -350,6 +350,7 @@ export async function sendBackgroundSuccessNotification(
         },
         sound: undefined,
         priority: Notifications.AndroidNotificationPriority.MIN,
+        categoryIdentifier: BACKGROUND_NOTIFICATION_CATEGORY,
       },
       trigger: null,
     });

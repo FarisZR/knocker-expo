@@ -7,6 +7,7 @@ const translations: TranslationMap = {
   'background.body': '{{whitelistedEntry}} – {{expiry}}',
   'background.expiresIn': 'Expires in {{seconds}} seconds',
   'background.expiryUnknown': 'Expiry unknown',
+  'background.disable': 'Stop background knocks',
 };
 
 function interpolate(template: string, params?: TranslationParams): string {

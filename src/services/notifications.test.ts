@@ -1,15 +1,27 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import * as Notifications from 'expo-notifications';
-import type { Mock } from 'jest-mock';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-import { sendBackgroundSuccessNotification, setNotificationErrorReporter } from './notifications';
+import {
+  initializeNotificationService,
+  sendBackgroundSuccessNotification,
+  setNotificationErrorReporter,
+} from './notifications';
+import {
+  BACKGROUND_SERVICE_ENABLED_KEY,
+  getBackgroundNotificationsEnabled,
+  setBackgroundNotificationsEnabled,
+  unregisterBackgroundTask,
+} from './backgroundKnocker';
 
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(() => Promise.resolve()),
   getPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
   requestPermissionsAsync: jest.fn(() => Promise.resolve({ granted: true })),
   setNotificationChannelAsync: jest.fn(() => Promise.resolve()),
+  setNotificationCategoryAsync: jest.fn(() => Promise.resolve()),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   scheduleNotificationAsync: jest.fn(() => Promise.resolve('notification-id')),
   AndroidImportance: { MIN: 'min' },
   AndroidNotificationPriority: { MIN: 'min' },
@@ -20,7 +32,37 @@ jest.mock('expo-notifications', () => ({
   },
 }));
 
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: jest.fn(() => Promise.resolve(null)),
+  setItemAsync: jest.fn(() => Promise.resolve()),
+  deleteItemAsync: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('./backgroundKnocker', () => ({
+  BACKGROUND_SERVICE_ENABLED_KEY: 'background-service-enabled',
+  getBackgroundNotificationsEnabled: jest.fn(async () => true),
+  setBackgroundNotificationsEnabled: jest.fn(async () => {}),
+  unregisterBackgroundTask: jest.fn(async () => {}),
+}));
+
 const originalPlatformDescriptor = Object.getOwnPropertyDescriptor(Platform, 'OS');
+
+const scheduleMock = jest.mocked(Notifications.scheduleNotificationAsync);
+const getPermissionsMock = jest.mocked(Notifications.getPermissionsAsync);
+const setChannelMock = jest.mocked(Notifications.setNotificationChannelAsync);
+const setCategoryMock = jest.mocked(Notifications.setNotificationCategoryAsync);
+const addResponseListenerMock = jest.mocked(Notifications.addNotificationResponseReceivedListener);
+
+const secureStoreGetItemMock = jest.mocked(SecureStore.getItemAsync);
+const secureStoreSetItemMock = jest.mocked(SecureStore.setItemAsync);
+
+const setBackgroundNotificationsEnabledMock = jest.mocked(setBackgroundNotificationsEnabled);
+const getBackgroundNotificationsEnabledMock = jest.mocked(getBackgroundNotificationsEnabled);
+const unregisterBackgroundTaskMock = jest.mocked(unregisterBackgroundTask);
+
+let notificationResponseHandler:
+  | ((response: Notifications.NotificationResponse) => Promise<void>)
+  | undefined;
 
 beforeAll(() => {
   Object.defineProperty(Platform, 'OS', {
@@ -36,17 +78,15 @@ afterAll(() => {
 });
 
 describe('sendBackgroundSuccessNotification', () => {
-  const scheduleMock = Notifications.scheduleNotificationAsync as unknown as Mock;
-  const getPermissionsMock = Notifications.getPermissionsAsync as unknown as Mock;
-  const setChannelMock = Notifications.setNotificationChannelAsync as unknown as Mock;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    getPermissionsMock.mockImplementation(async () => ({ granted: true }));
+    getPermissionsMock.mockResolvedValue({
+      granted: true,
+    } as Notifications.NotificationPermissionsStatus);
     setNotificationErrorReporter(undefined);
   });
 
-  it('schedules a localized notification when permissions are granted', async () => {
+  it('schedules a localized notification that includes disable action category', async () => {
     await sendBackgroundSuccessNotification({
       endpoint: 'https://example.com',
       whitelistedEntry: '1.2.3.4',
@@ -65,7 +105,11 @@ describe('sendBackgroundSuccessNotification', () => {
             expiresInSeconds: 3600,
             type: 'background-knock-success',
           }),
+          categoryIdentifier: 'background-knocker-actions',
+          priority: Notifications.AndroidNotificationPriority.MIN,
+          sound: undefined,
         }),
+        trigger: null,
       })
     );
   });
@@ -145,5 +189,58 @@ describe('sendBackgroundSuccessNotification', () => {
       configurable: true,
       get: () => 'android',
     });
+  });
+});
+
+describe('initializeNotificationService', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    notificationResponseHandler = undefined;
+
+    addResponseListenerMock.mockImplementation((listener: any) => {
+      notificationResponseHandler = listener;
+      return { remove: jest.fn() };
+    });
+
+    getBackgroundNotificationsEnabledMock.mockResolvedValue(true);
+    secureStoreGetItemMock.mockResolvedValue(null);
+  });
+
+  it('registers the disable action category', async () => {
+    await expect(initializeNotificationService()).resolves.toBe(true);
+
+    expect(setCategoryMock).toHaveBeenCalledWith('background-knocker-actions', [
+      expect.objectContaining({
+        identifier: 'disable-knocker-action',
+        buttonTitle: 'Stop background knocks',
+        options: expect.objectContaining({
+          isDestructive: true,
+          opensAppToForeground: false,
+        }),
+      }),
+    ]);
+  });
+
+  it('disables background knocks when action is triggered', async () => {
+    secureStoreGetItemMock.mockImplementation(async (key: string) => {
+      if (key === BACKGROUND_SERVICE_ENABLED_KEY) {
+        return 'true';
+      }
+      return null;
+    });
+
+    await initializeNotificationService();
+    expect(notificationResponseHandler).toBeDefined();
+
+    await notificationResponseHandler?.({
+      actionIdentifier: 'disable-knocker-action',
+    } as Notifications.NotificationResponse);
+
+    expect(setBackgroundNotificationsEnabledMock).toHaveBeenCalledWith(false);
+    expect(secureStoreSetItemMock).toHaveBeenCalledWith(
+      BACKGROUND_SERVICE_ENABLED_KEY,
+      'false'
+    );
+    expect(unregisterBackgroundTaskMock).toHaveBeenCalled();
   });
 });

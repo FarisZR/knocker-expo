@@ -62,7 +62,7 @@ The Knocker app uses a small, modular architecture optimized for testability and
 - `background-service-enabled`
 - `settings-open`
 - `background-notifications-enabled`
-  Controls whether background success notifications (local OS alerts dispatched via `sendBackgroundSuccessNotification` in `backgroundKnocker.ts`) are delivered when the app is in the background. Defaults to enabled (`true`) so the background worker can surface successful knocks initiated outside the foreground UI. Toggle `background-service-enabled` to start/stop the background fetch process itself; disable `background-notifications-enabled` only when you want the worker to keep running without emitting notifications.
+  Controls whether background success notifications (local OS alerts dispatched via [`sendBackgroundSuccessNotification`](src/services/notifications.ts:311)) are delivered when the app is in the background. Defaults to enabled (`true`) so the background worker can surface successful knocks initiated outside the foreground UI. Toggle `background-service-enabled` to start/stop the background fetch process itself; disable `background-notifications-enabled` only when you want the worker to keep running without emitting notifications.
 - `background-last-run`
 
 ## 6. Background Tasks & Platform Guards
@@ -72,6 +72,7 @@ The Knocker app uses a small, modular architecture optimized for testability and
 - When background task runs, it only passes TTL/IP options to the `knock()` call if they are present and valid.
 - The Android scheduler has a minimum interval of 15 minutes (900 seconds). If a TTL below this threshold is set, the background service will not run and a warning will be shown to the user.
 - Each background execution stores a status payload (`background-last-run`) so the UI can surface stale/failing runs and prompt for corrective action (for example disabling battery optimizations on Android).
+- Background success notifications register an interactive category with a destructive “Stop background knocks” action. When tapped, the listener in [`initializeNotificationService`](src/services/notifications.ts:232) disables future background notifications, flips the persisted `background-service-enabled` flag to `false`, and calls [`unregisterBackgroundTask`](src/services/backgroundKnocker.ts:378) so no further background knocks run until re-enabled from the UI.
 - If a run fails or the OS reports restrictions while the app is backgrounded on Android, the HomeScreen exposes a guided CTA that opens the system battery optimization settings via `expo-intent-launcher`.
 
 ## 7. Testing & Migration Considerations
