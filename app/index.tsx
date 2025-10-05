@@ -339,12 +339,22 @@ export default function HomeScreen() {
   const onManualCatchup = async () => {
     // Manual catch-up should only attempt when credentials exist.
     if (!endpoint || !token) return;
-    // Only perform catch-up if the stored nextRunAt is in the past or missing.
-    const meta = await getNextRunMetadata();
+
+    let meta;
+    try {
+      // Only perform catch-up if the stored nextRunAt is in the past or missing.
+      meta = await getNextRunMetadata();
+    } catch (error) {
+      console.warn('Failed to read background metadata for manual catch-up:', error);
+      setStatus('Unable to check background status. Please try again later.');
+      return;
+    }
+
     if (meta && typeof meta.nextRunAt === 'number' && Date.now() < meta.nextRunAt) {
       // Not yet due; no-op to avoid unnecessary network.
       return;
     }
+
     const options = await getKnockOptions();
     await handleKnock(endpoint, token, options, true);
     // Refresh status after manual catch-up
