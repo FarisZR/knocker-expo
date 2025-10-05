@@ -1,7 +1,7 @@
-import { AppState, Platform } from 'react-native';
-import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as SecureStore from 'expo-secure-store';
+import * as TaskManager from 'expo-task-manager';
+import { AppState, Platform } from 'react-native';
 import { knock } from './knocker';
 import { normalizeTtlForAndroidScheduler } from './knockOptions';
 import { sendBackgroundSuccessNotification } from './notifications';
@@ -20,6 +20,11 @@ export const BACKGROUND_LAST_RUN_KEY = 'background-last-run';
  * Storage key for persisted next-run scheduling metadata.
  */
 export const BACKGROUND_NEXT_RUN_KEY = 'background-next-run';
+
+/**
+ * Storage key that tracks whether the background service is enabled.
+ */
+export const BACKGROUND_SERVICE_ENABLED_KEY = 'background-service-enabled';
 
 /**
  * Storage key that tracks whether silent notifications are allowed.
@@ -216,10 +221,19 @@ export const taskExecutor = async () => {
       });
  
       // --- Scheduling logic: persist next-run metadata and attempt to adjust scheduler ---
-      const requestedTtl =
-        (result && (result as any).requested_ttl !== undefined
-          ? (result as any).requested_ttl
-          : ttlNum) ?? undefined;
+      let requestedTtl: number | undefined;
+
+      if (result !== null && typeof result === 'object' && 'requested_ttl' in result) {
+        const rawRequestedTtl = (result as { requested_ttl?: unknown }).requested_ttl;
+        const parsedRequestedTtl = Number(rawRequestedTtl);
+        if (Number.isFinite(parsedRequestedTtl)) {
+          requestedTtl = parsedRequestedTtl;
+        }
+      }
+
+      if (requestedTtl === undefined && typeof ttlNum === 'number' && Number.isFinite(ttlNum)) {
+        requestedTtl = ttlNum;
+      }
       const effectiveTtl = typeof options.ttl === 'number' ? options.ttl : undefined;
       const ttlBelowMinimum =
         typeof requestedTtl === 'number' && requestedTtl < ANDROID_SCHEDULER_MIN_INTERVAL;

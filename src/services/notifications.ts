@@ -1,15 +1,21 @@
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
  
+import {
+  BACKGROUND_SERVICE_ENABLED_KEY,
+  getBackgroundNotificationsEnabled,
+  setBackgroundNotificationsEnabled,
+  unregisterBackgroundTask,
+} from './backgroundKnocker';
 import { t } from './localization';
-import { unregisterBackgroundTask, setBackgroundNotificationsEnabled } from './backgroundKnocker';
 
 const ANDROID_CHANNEL_ID = 'background-knocker-success';
 const BACKGROUND_NOTIFICATION_CATEGORY = 'background-knocker-actions';
 const DISABLE_KNOCKER_ACTION_ID = 'disable-knocker-action';
 
 let handlerConfigured = false;
+let notificationResponseSubscription: Notifications.Subscription | undefined;
 
 export type NotificationErrorReporter = (error: unknown) => void;
 
@@ -35,6 +41,27 @@ function ensureNotificationHandlerConfigured() {
   });
 
   handlerConfigured = true;
+}
+
+function clearNotificationResponseSubscription() {
+  if (!notificationResponseSubscription) {
+    return;
+  }
+
+  try {
+    notificationResponseSubscription.remove();
+  } catch (removeError) {
+    if (
+      typeof __DEV__ !== 'undefined' &&
+      __DEV__ &&
+      typeof console !== 'undefined' &&
+      typeof console.warn === 'function'
+    ) {
+      console.warn('Failed to remove existing notification response listener:', removeError);
+    }
+  } finally {
+    notificationResponseSubscription = undefined;
+  }
 }
 
 async function ensureAndroidChannelAsync(): Promise<boolean> {
@@ -101,6 +128,107 @@ function isPermissionGranted(status: Notifications.NotificationPermissionsStatus
   return false;
 }
 
+async function handleNotificationResponse(
+  response: Notifications.NotificationResponse
+): Promise<void> {
+  try {
+    const actionId = response?.actionIdentifier;
+    if (actionId === DISABLE_KNOCKER_ACTION_ID) {
+      const previousStates = {
+        notificationsEnabled: await (async () => {
+          try {
+            return await getBackgroundNotificationsEnabled();
+          } catch {
+            return undefined;
+          }
+        })(),
+        backgroundServiceValue: await (async () => {
+          try {
+            return await SecureStore.getItemAsync(BACKGROUND_SERVICE_ENABLED_KEY);
+          } catch {
+            return undefined;
+          }
+        })(),
+      };
+
+      type DisableOperation = 'set-notification-flag' | 'persist-service-flag' | 'unregister-task';
+      const rollbacks: Array<() => Promise<void>> = [];
+      let failedOperation: DisableOperation | undefined;
+
+      try {
+        failedOperation = 'set-notification-flag';
+        await setBackgroundNotificationsEnabled(false);
+        rollbacks.push(async () => {
+          if (typeof previousStates.notificationsEnabled === 'boolean') {
+            await setBackgroundNotificationsEnabled(previousStates.notificationsEnabled);
+          }
+        });
+
+        failedOperation = 'persist-service-flag';
+        // Mirror existing settings key used elsewhere so UI reflects change.
+        await SecureStore.setItemAsync(BACKGROUND_SERVICE_ENABLED_KEY, 'false');
+        rollbacks.push(async () => {
+          if (typeof previousStates.backgroundServiceValue === 'string') {
+            await SecureStore.setItemAsync(
+              BACKGROUND_SERVICE_ENABLED_KEY,
+              previousStates.backgroundServiceValue
+            );
+          } else if (previousStates.backgroundServiceValue === null) {
+            await SecureStore.deleteItemAsync(BACKGROUND_SERVICE_ENABLED_KEY);
+          }
+        });
+
+        failedOperation = 'unregister-task';
+        await unregisterBackgroundTask();
+      } catch (disableError) {
+        for (const rollback of rollbacks.reverse()) {
+          try {
+            await rollback();
+          } catch (rollbackError) {
+            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+              console.warn(
+                'Rollback step failed while disabling knocker via notification action:',
+                rollbackError
+              );
+            }
+          }
+        }
+
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          const failedLabel = (() => {
+            switch (failedOperation) {
+              case 'set-notification-flag':
+                return 'setBackgroundNotificationsEnabled(false)';
+              case 'persist-service-flag':
+                return `SecureStore.setItemAsync(${BACKGROUND_SERVICE_ENABLED_KEY})`;
+              case 'unregister-task':
+                return 'unregisterBackgroundTask()';
+              default:
+                return 'an unknown step';
+            }
+          })();
+
+          console.warn(
+            `Failed to disable knocker via notification action during ${failedLabel}:`,
+            disableError
+          );
+        }
+
+        const reporter = notificationErrorReporter;
+        if (typeof reporter === 'function') {
+          try {
+            reporter(disableError);
+          } catch {
+            // swallow reporter failures
+          }
+        }
+      }
+    }
+  } catch {
+    // Swallow to avoid throwing in notification handler.
+  }
+}
+
 export async function initializeNotificationService(): Promise<boolean> {
   ensureNotificationHandlerConfigured();
   // Ensure categories/actions are configured for interactive notifications.
@@ -122,34 +250,20 @@ export async function initializeNotificationService(): Promise<boolean> {
 
   // Register a response listener that handles interactive notification actions.
   try {
-    Notifications.addNotificationResponseReceivedListener(async (response) => {
-      try {
-        const actionId = response?.actionIdentifier;
-        if (actionId === DISABLE_KNOCKER_ACTION_ID) {
-          // Disable background notifications preference and unregister the background task.
-          try {
-            await setBackgroundNotificationsEnabled(false);
-            // Mirror existing settings key used elsewhere so UI reflects change.
-            await SecureStore.setItemAsync('background-service-enabled', 'false');
-            await unregisterBackgroundTask();
-          } catch (e) {
-            if (typeof notificationErrorReporter === 'function') {
-              try {
-                notificationErrorReporter(e);
-              } catch {
-                // swallow reporter failures
-              }
-            }
-            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-              console.warn('Failed to disable knocker via notification action:', e);
-            }
-          }
-        }
-      } catch {
-        // Swallow to avoid throwing in notification handler.
-      }
-    });
-  } catch {
+    clearNotificationResponseSubscription();
+    notificationResponseSubscription = Notifications.addNotificationResponseReceivedListener(
+      handleNotificationResponse
+    );
+  } catch (listenerError) {
+    notificationResponseSubscription = undefined;
+    if (
+      typeof __DEV__ !== 'undefined' &&
+      __DEV__ &&
+      typeof console !== 'undefined' &&
+      typeof console.warn === 'function'
+    ) {
+      console.warn('Failed to register notification response listener:', listenerError);
+    }
     // Listener registration failed — non-fatal.
   }
 
