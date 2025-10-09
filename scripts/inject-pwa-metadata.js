@@ -59,6 +59,26 @@ if (fs.existsSync(publicDir)) {
   });
 }
 
+// Copy app icons for PWA
+const assetsDir = path.join(__dirname, '..', 'assets', 'images');
+const distAssetsDir = path.join(distDir, 'assets', 'images');
+if (fs.existsSync(assetsDir)) {
+  // Create dist/assets/images if it doesn't exist
+  if (!fs.existsSync(distAssetsDir)) {
+    fs.mkdirSync(distAssetsDir, { recursive: true });
+  }
+  
+  const iconFiles = ['icon.png', 'adaptive-icon.png'];
+  iconFiles.forEach(file => {
+    const src = path.join(assetsDir, file);
+    const dest = path.join(distAssetsDir, file);
+    if (fs.existsSync(src)) {
+      fs.copyFileSync(src, dest);
+      console.log(`✓ Copied ${file} to dist/assets/images/`);
+    }
+  });
+}
+
 // Process all HTML files in dist
 const htmlFiles = fs.readdirSync(distDir)
   .filter(f => f.endsWith('.html'))
