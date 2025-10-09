@@ -26,22 +26,39 @@ The output will be in the `dist/` directory.
 
 ## Deployment
 
-### GitHub Pages
+### GitHub Pages (Automated via GitHub Actions)
 
-1. Build the app:
-   ```bash
-   npm run build:web
-   ```
+The repository includes a GitHub Actions workflow that automatically:
+- Builds and deploys to GitHub Pages on every push to `main`
+- Creates PR preview deployments for pull requests
 
-2. Deploy the `dist/` folder to GitHub Pages:
-   ```bash
-   # Using gh-pages package
-   npx gh-pages -d dist
-   
-   # Or manually copy files to your gh-pages branch
-   ```
+**Setup:**
 
-3. Configure GitHub Pages in your repository settings to serve from the appropriate branch.
+1. Enable GitHub Pages in your repository settings:
+   - Go to Settings > Pages
+   - Set Source to "Deploy from a branch"
+   - Select the `gh-pages` branch
+   - Click Save
+
+2. The workflow will automatically run on:
+   - Every push to `main` → Deploys to production at `https://yourusername.github.io/knocker-expo/`
+   - Every PR update → Creates a preview at `https://yourusername.github.io/knocker-expo/pr-preview/pr-X/`
+
+3. (Optional) Add a custom domain:
+   - Edit `.github/workflows/deploy.yml` and replace `knocker.example.com` with your domain
+   - Configure your DNS settings to point to GitHub Pages
+
+**Manual Deployment (Alternative):**
+
+If you prefer manual deployment:
+
+```bash
+# Using gh-pages package
+npm run build:web
+npx gh-pages -d dist
+
+# Or manually copy files to your gh-pages branch
+```
 
 ### Other Static Hosts
 
