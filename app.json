@@ -22,7 +22,17 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/favicon.png",
+      "name": "Knocker",
+      "shortName": "Knocker",
+      "description": "Whitelist your IP address with a single knock",
+      "themeColor": "#0a7ea4",
+      "backgroundColor": "#ffffff",
+      "display": "standalone",
+      "orientation": "portrait",
+      "startUrl": "/",
+      "scope": "/",
+      "lang": "en"
     },
     "plugins": [
       "expo-router",
