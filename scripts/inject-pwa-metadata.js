@@ -30,16 +30,20 @@ function injectMetaTags(htmlPath) {
   let html = fs.readFileSync(htmlPath, 'utf8');
   
   // Check if already injected
-  if (html.includes('rel="manifest"')) {
+  if (/rel\s*=\s*["']manifest["']/i.test(html)) {
     console.log(`PWA metadata already present in ${path.basename(htmlPath)}`);
     return;
   }
 
-  // Inject before </head>
-  html = html.replace('</head>', `${pwaMetaTags}</head>`);
+  // Inject before </head> (case-insensitive)
+  if (!/<\/head>/i.test(html)) {
+    console.warn(`Warning: No </head> tag found in ${path.basename(htmlPath)}, skipping injection`);
+    return;
+  }
+  html = html.replace(/<\/head>/i, `${pwaMetaTags}</head>`);
   
-  // Update title if empty
-  html = html.replace(/<title[^>]*><\/title>/, '<title>Knocker</title>');
+  // Update title if empty or whitespace-only
+  html = html.replace(/<title[^>]*>\s*<\/title>/i, '<title>Knocker</title>');
   
   fs.writeFileSync(htmlPath, html, 'utf8');
   console.log(`✓ Injected PWA metadata into ${path.basename(htmlPath)}`);
