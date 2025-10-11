@@ -1,7 +1,11 @@
 // Knocker PWA Service Worker
 const CACHE_NAME = 'knocker-v1';
-const ASSET_PATHS = ['.', 'index.html', 'favicon.ico', 'manifest.json'];
-const STATIC_CACHE = ASSET_PATHS.map((asset) => new URL(asset, self.location).toString());
+const STATIC_CACHE = [
+  '/',
+  '/index.html',
+  '/favicon.ico',
+  '/manifest.json'
+];
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
@@ -10,7 +14,7 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('[Service Worker] Caching static assets');
-        return cache.addAll(STATIC_CACHE.map((url) => new Request(url, { cache: 'reload' })))
+        return cache.addAll(STATIC_CACHE.map(url => new Request(url, { cache: 'reload' })))
           .catch((error) => {
             console.warn('[Service Worker] Cache addAll failed for some assets:', error);
             // Continue installation even if some assets fail to cache
@@ -84,6 +88,8 @@ self.addEventListener('fetch', (event) => {
             });
           return cachedResponse;
         }
+        }
+
         // Not in cache, fetch from network
         return fetch(request)
           .then((networkResponse) => {
