@@ -31,6 +31,26 @@ jobs:
       - name: Build for web
         run: npm run build:web
 
+      - name: Validate build output
+        run: |
+          if [ ! -d "./dist" ]; then
+            echo "Error: dist directory not found"
+            exit 1
+          fi
+          if [ ! -f "./dist/index.html" ]; then
+            echo "Error: index.html not found in dist"
+            exit 1
+          fi
+          if [ ! -f "./dist/manifest.json" ]; then
+            echo "Error: manifest.json not found in dist"
+            exit 1
+          fi
+          if [ ! -f "./dist/service-worker.js" ]; then
+            echo "Error: service-worker.js not found in dist"
+            exit 1
+          fi
+          echo "✓ Build output validated"
+
       - name: Deploy to GitHub Pages (main branch)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v4
