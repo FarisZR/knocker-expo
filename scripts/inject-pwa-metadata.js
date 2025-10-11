@@ -57,8 +57,13 @@ if (fs.existsSync(publicDir)) {
     const src = path.join(publicDir, file);
     const dest = path.join(distDir, file);
     if (fs.existsSync(src)) {
-      fs.copyFileSync(src, dest);
-      console.log(`✓ Copied ${file} to dist/`);
+      try {
+        fs.copyFileSync(src, dest);
+        console.log(`✓ Copied ${file} to dist/`);
+      } catch (error) {
+        console.error(`✗ Failed to copy ${file}:`, error.message);
+        process.exit(1);
+      }
     }
   });
 }
@@ -69,7 +74,12 @@ const distAssetsDir = path.join(distDir, 'assets', 'images');
 if (fs.existsSync(assetsDir)) {
   // Create dist/assets/images if it doesn't exist
   if (!fs.existsSync(distAssetsDir)) {
-    fs.mkdirSync(distAssetsDir, { recursive: true });
+    try {
+      fs.mkdirSync(distAssetsDir, { recursive: true });
+    } catch (error) {
+      console.error('✗ Failed to create dist/assets/images:', error.message);
+      process.exit(1);
+    }
   }
   
   const iconFiles = ['icon.png', 'adaptive-icon.png'];
@@ -77,8 +87,13 @@ if (fs.existsSync(assetsDir)) {
     const src = path.join(assetsDir, file);
     const dest = path.join(distAssetsDir, file);
     if (fs.existsSync(src)) {
-      fs.copyFileSync(src, dest);
-      console.log(`✓ Copied ${file} to dist/assets/images/`);
+      try {
+        fs.copyFileSync(src, dest);
+        console.log(`✓ Copied ${file} to dist/assets/images/`);
+      } catch (error) {
+        console.error(`✗ Failed to copy ${file}:`, error.message);
+        process.exit(1);
+      }
     }
   });
 }
