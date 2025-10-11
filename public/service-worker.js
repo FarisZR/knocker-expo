@@ -79,7 +79,7 @@ self.addEventListener('fetch', (event) => {
             .then((networkResponse) => {
               if (networkResponse && networkResponse.status === 200) {
                 caches.open(CACHE_NAME).then((cache) => {
-                  cache.put(request, networkResponse);
+                  cache.put(request, networkResponse.clone());
                 });
               }
             })
@@ -87,6 +87,7 @@ self.addEventListener('fetch', (event) => {
               // Fetch failed, but we have a cached version
             });
           return cachedResponse;
+        }
         }
 
         // Not in cache, fetch from network
