@@ -17,10 +17,10 @@ export const Colors = {
   light: {
     // Core
     text: '#11181C',
-    background: '#F8FAFC',
+    background: '#F5F5F5', // Light gray background like web
     surface: '#FFFFFF',
     surfaceAlt: '#F1F5F9',              // surfaceContainerLow
-    surfaceVariant: '#E3EFF5',          // subtle tinted surface
+    surfaceVariant: '#F5F5F5',          // subtle surface for inputs
     surfaceContainer: '#FFFFFF',
     surfaceContainerHigh: '#F4F8FA',
     tint: primaryLight,                 // retained legacy alias
@@ -68,10 +68,10 @@ export const Colors = {
   dark: {
     // Core
     text: '#ECEDEE',
-    background: '#0F1418',
-    surface: '#151D23',
+    background: '#1a1f29', // Dark blue-gray like web
+    surface: '#24293a',
     surfaceAlt: '#1F2A32',
-    surfaceVariant: '#29404A',
+    surfaceVariant: '#2d3447',
     surfaceContainer: '#1B242B',
     surfaceContainerHigh: '#243038',
     tint: primaryDark,

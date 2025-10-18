@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as IntentLauncher from 'expo-intent-launcher';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -464,6 +465,12 @@ export default function HomeScreen() {
                 },
               ]}
             >
+              {isSuccess && (
+                <View style={styles.successHeader}>
+                  <Ionicons name="checkmark-circle" size={24} color={theme.success} />
+                  <StyledText style={[styles.successTitle, { color: theme.success }]}>Success!</StyledText>
+                </View>
+              )}
               <StyledText
                 style={[
                   styles.statusText,
@@ -607,6 +614,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     alignSelf: 'stretch',
+  },
+  successHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  successTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   statusText: {
     fontSize: 15,
