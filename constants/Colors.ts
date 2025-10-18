@@ -4,8 +4,8 @@
  * NOTE: Only a minimal subset is defined (enough for current UI); expand as needed.
  */
 
-const primaryLight = '#0A7EA4';
-const primaryDark = '#4FC3F7';
+const primaryLight = '#fde562'; // Golden yellow accent
+const primaryDark = '#fde562'; // Golden yellow accent
 const secondaryLight = '#53606B';
 const secondaryDark = '#B3C2CC';
 const errorLight = '#DC2626';
@@ -30,9 +30,9 @@ export const Colors = {
 
     // Roles
     primary: primaryLight,
-    onPrimary: '#FFFFFF',
-    primaryContainer: '#BEE7F4',
-    onPrimaryContainer: '#063949',
+    onPrimary: '#000000', // Black text on golden yellow
+    primaryContainer: '#fff9d9', // Light golden tint
+    onPrimaryContainer: '#3d3500',
 
     secondary: secondaryLight,
     onSecondary: '#FFFFFF',
@@ -44,12 +44,14 @@ export const Colors = {
     errorContainer: '#FEE4E2',
     onErrorContainer: '#410002',
 
-    success: '#059669',
+    success: '#10b981', // Green for success
+    successContainer: '#d1fae5',
+    onSuccessContainer: '#065f46',
     warning: '#D97706',
 
-    // Gradients
+    // Gradients (not used in new design)
     gradientStart: primaryLight,
-    gradientEnd: '#34d399',
+    gradientEnd: primaryLight,
 
     tabIconDefault: '#687076',
     tabIconSelected: primaryLight,
@@ -79,9 +81,9 @@ export const Colors = {
 
     // Roles
     primary: primaryDark,
-    onPrimary: '#07242E',
-    primaryContainer: '#134B5C',
-    onPrimaryContainer: '#DBF6FF',
+    onPrimary: '#000000', // Black text on golden yellow
+    primaryContainer: '#3d3500', // Dark golden
+    onPrimaryContainer: '#fff9d9',
 
     secondary: secondaryDark,
     onSecondary: '#223038',
@@ -93,11 +95,13 @@ export const Colors = {
     errorContainer: '#621112',
     onErrorContainer: '#FCEEEE',
 
-    success: '#34D399',
+    success: '#10b981', // Green for success
+    successContainer: '#065f46',
+    onSuccessContainer: '#d1fae5',
     warning: '#FBBF24',
 
     gradientStart: primaryDark,
-    gradientEnd: '#34d399',
+    gradientEnd: primaryDark,
 
     tabIconDefault: '#9BA1A6',
     tabIconSelected: primaryDark,

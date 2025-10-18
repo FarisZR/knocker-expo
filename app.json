@@ -14,7 +14,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#fde562"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.fariszr.knocker"

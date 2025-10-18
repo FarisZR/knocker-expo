@@ -89,7 +89,7 @@ export function StyledCard({
 const styles = StyleSheet.create({
   card: {
     width: '100%',
-    borderRadius: 28, // expressive large shape
+    borderRadius: 16, // More refined, less bubbly
     padding: 24,
     overflow: 'hidden',
   },

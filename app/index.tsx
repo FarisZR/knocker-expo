@@ -15,6 +15,7 @@ import {
   useColorScheme,
   View,
 } from 'react-native';
+import { KnockerLogo } from '../components/KnockerLogo';
 import { StyledButton } from '../components/ui/StyledButton';
 import StyledCard from '../components/ui/StyledCard';
 import { StyledText } from '../components/ui/StyledText';
@@ -80,6 +81,8 @@ export default function HomeScreen() {
   const pillBg = theme.surfaceVariant;
   const pillErrorBg = theme.errorContainer;
   const pillWarningBg = theme.warning;
+  const pillSuccessBg = theme.successContainer ?? '#d1fae5';
+  const pillSuccessBorder = theme.success ?? '#10b981';
   const pillBorder = theme.outlineVariant;
 
   useEffect(() => {
@@ -434,12 +437,13 @@ export default function HomeScreen() {
 
   const isWarning = Boolean(warningMessage) || backgroundStatusIsWarning || hasBackgroundBatteryHint;
   const isError = status.startsWith('Error') || status.startsWith('Credentials not set');
+  const isSuccess = status.startsWith('Whitelisted:') && !isError && !isWarning;
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1 }}>
         <StyledView style={styles.outer}>
-          <StyledText style={styles.title}>Knocker</StyledText>
+          <KnockerLogo width={280} style={styles.logo} />
 
           <StyledCard animated>
             <StyledButton
@@ -453,8 +457,9 @@ export default function HomeScreen() {
               style={[
                 styles.pill,
                 {
-                  backgroundColor: isError ? pillErrorBg : isWarning ? pillWarningBg : pillBg,
-                  borderColor: pillBorder,
+                  backgroundColor: isError ? pillErrorBg : isWarning ? pillWarningBg : isSuccess ? pillSuccessBg : pillBg,
+                  borderColor: isSuccess ? pillSuccessBorder : pillBorder,
+                  borderWidth: isSuccess ? 2 : 1,
                   opacity: statusOpacity,
                 },
               ]}
@@ -554,8 +559,8 @@ export default function HomeScreen() {
                     <Switch
                       value={isBackgroundServiceEnabled}
                       onValueChange={setIsBackgroundServiceEnabled}
-                      trackColor={{ false: '#767577', true: Colors.light.tint }}
-                      thumbColor={isBackgroundServiceEnabled ? Colors.light.tint : '#f4f3f4'}
+                      trackColor={{ false: '#767577', true: theme.primary }}
+                      thumbColor={isBackgroundServiceEnabled ? '#000000' : '#f4f3f4'}
                     />
                   </View>
 
@@ -565,8 +570,8 @@ export default function HomeScreen() {
                       <Switch
                         value={isBackgroundNotificationEnabled}
                         onValueChange={handleNotificationToggle}
-                        trackColor={{ false: '#767577', true: Colors.light.tint }}
-                        thumbColor={isBackgroundNotificationEnabled ? Colors.light.tint : '#f4f3f4'}
+                        trackColor={{ false: '#767577', true: theme.primary }}
+                        thumbColor={isBackgroundNotificationEnabled ? '#000000' : '#f4f3f4'}
                       />
                     </View>
                   )}
@@ -586,24 +591,20 @@ const styles = StyleSheet.create({
   outer: {
     flex: 1,
     padding: 24,
-    maxWidth: 860,
+    maxWidth: 560,
     width: '100%',
     alignSelf: 'center',
     justifyContent: 'center',
     gap: 32,
   },
-  title: {
-    fontSize: 54,
-    fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -1,
-    color: '#0a7ea4',
+  logo: {
+    marginBottom: -8,
   },
   pill: {
     marginTop: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 16,
     borderWidth: 1,
     alignSelf: 'stretch',
   },
