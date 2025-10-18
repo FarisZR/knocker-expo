@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   input: {
     height: 56,
     borderWidth: 1.2,
-    borderRadius: 20,
+    borderRadius: 12, // More refined, less bubbly
     paddingHorizontal: 20,
     fontSize: 16,
     marginBottom: 14,
