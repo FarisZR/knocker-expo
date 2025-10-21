@@ -1,0 +1,67 @@
+name: Build and Attach APK to Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-and-attach:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    env:
+      EXPO_NO_TELEMETRY: 1
+      NODE_OPTIONS: --max_old_space_size=4096
+
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Java (Temurin 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Expo prebuild (generate android/)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Ensure gradlew is executable
+        run: chmod +x android/gradlew
+
+      - name: Build release APK with Gradle
+        working-directory: android
+        run: ./gradlew :app:assembleRelease --no-daemon -x lint
+
+      - name: Find APK
+        run: ls -al android/app/build/outputs/apk/release
+
+      - name: Upload APK to the Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: android/app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
