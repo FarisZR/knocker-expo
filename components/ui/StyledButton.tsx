@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   base: {
     paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 24, // large shape per MD3 expressive
+    borderRadius: 12, // More refined, less bubbly
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
