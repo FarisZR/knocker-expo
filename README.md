@@ -15,7 +15,8 @@ Knocker-EXPO is an app for Knocker written in Expo (React Native) that provides 
 ## Install
 
 The app has been tested on android.
-An apk is available under the latest release in the [Releases Tab](https://github.com/FarisZR/knocker-expo/releases)
+An apk is available under the latest release in the [Releases Tab](https://github.com/FarisZR/knocker-expo/releases).
+APKs are also build on changes to the code or the pipelines
 
 ## development
 
