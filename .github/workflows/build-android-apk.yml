@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - '**'
+    paths:
+      - 'app/**'
+      - 'android/**'
+      - 'components/**'
+      - 'screens/**'
+      - 'utils/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'app.json'
+      - '.github/workflows/build-android-apk.yml'
   pull_request:
 
 jobs:
