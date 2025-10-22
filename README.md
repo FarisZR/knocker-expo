@@ -1,18 +1,23 @@
-# Knocker: A Secure IP Whitelisting App
+# Knocker-EXPO: React EXPO client for [Knocker](https://github.com/FarisZR/Knocker)
 
-Knocker-EXPO is a client for Knocker written in Expo (React Native) that provides a secure and convenient way to whitelist your device's IP address with a compatible server. It is designed for users who need temporary access to protected networks or services and want a simple, reliable tool to manage it.
+Knocker-EXPO is an app for Knocker written in Expo (React Native) that provides a convenient way to whitelist your device's IP address with a compatible server. It is designed for users who need temporary access to protected networks or services and want a simple, reliable tool to manage it.
+
+![](screenshot.webp)
 
 ## ✨ Features
 
-- **Simple Setup:** A one-time setup screen to configure your server endpoint and secret token.
 - **One-Tap Whitelisting:** A prominent "Knock" button to instantly whitelist your current IP address.
-- **Automatic Knock:** The app automatically knocks on launch to streamline your workflow.
-- **Background Service:** An optional background service that re-knocks every 15 minutes to ensure your access doesn't expire.
+- **Automatic Knock:** The app automatically knocks on launch
+- **Background Service:** An optional background service that re-knocks with a schedule of at least 15 minutes to ensure your access doesn't expire.
 - **Reliability Hints:** Automatic detection of missed background runs with Android-specific guidance to disable battery optimizations when needed.
 - **Secure Storage:** All sensitive credentials (endpoint, token) are stored securely on your device using `expo-secure-store`.
-- **Modern UI:** A clean and intuitive interface built with Material You (Material 3) design principles.
 
-## 🚀 Getting Started
+## Install
+
+The app has been tested on android.
+An apk is available under the latest release in the [Releases Tab](https://github.com/FarisZR/knocker-expo/releases)
+
+## development
 
 ### Prerequisites
 
